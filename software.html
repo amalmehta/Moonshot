@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Software & AI · Moonshot</title>
+<meta name="description" content="How a reusable booster's flight software works: redundant computers, Kalman filters, thrust-vector control, landing guidance, reliability math, and an honest look at autonomy and AI, with a working landing simulator.">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="css/style.css">
+<script type="module" src="js/common.js"></script>
+<script type="module" src="js/pages/software.js"></script>
+<style>
+  .arch { overflow-x: auto; margin: 14px 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); }
+  .arch svg { display: block; min-width: 680px; width: 100%; height: auto; }
+  .arch text { font-family: var(--font); fill: var(--fg); font-size: 13px; }
+  .arch .sub { fill: var(--fg-muted); font-size: 11px; }
+  .arch .ttl { font-weight: 700; font-size: 14px; }
+  .arch .box { stroke-width: 1.4; rx: 8; }
+  .arch .h-sens { fill: oklch(var(--tag-bg-l) calc(var(--tag-c) * .45) 222); stroke: oklch(calc((var(--tag-l) + var(--tag-bg-l)) / 2) calc(var(--tag-c) * .7) 222); }
+  .arch .h-nav { fill: oklch(var(--tag-bg-l) calc(var(--tag-c) * .45) 286); stroke: oklch(calc((var(--tag-l) + var(--tag-bg-l)) / 2) calc(var(--tag-c) * .7) 286); }
+  .arch .h-gnc { fill: oklch(var(--tag-bg-l) calc(var(--tag-c) * .45) 300); stroke: oklch(calc((var(--tag-l) + var(--tag-bg-l)) / 2) calc(var(--tag-c) * .7) 300); }
+  .arch .h-ctl { fill: oklch(var(--tag-bg-l) calc(var(--tag-c) * .45) 316); stroke: oklch(calc((var(--tag-l) + var(--tag-bg-l)) / 2) calc(var(--tag-c) * .7) 316); }
+  .arch .h-rel { fill: oklch(var(--tag-bg-l) calc(var(--tag-c) * .45) 332); stroke: oklch(calc((var(--tag-l) + var(--tag-bg-l)) / 2) calc(var(--tag-c) * .7) 332); }
+  .arch .h-act { fill: oklch(var(--tag-bg-l) calc(var(--tag-c) * .45) 18); stroke: oklch(calc((var(--tag-l) + var(--tag-bg-l)) / 2) calc(var(--tag-c) * .7) 18); }
+  .arch .string { fill: var(--bg-sunk); stroke: var(--border); stroke-dasharray: 5 4; }
+  .arch .wire { stroke: var(--fg-muted); stroke-width: 1.6; fill: none; }
+  .arch .wire.thin { stroke-width: 1.1; stroke-dasharray: 4 4; }
+  .arch .arrowhead { fill: var(--fg-muted); }
+  .pubtable td:nth-child(2) { white-space: nowrap; }
+  .land-wrap { position: relative; }
+  #land-canvas { width: 100%; height: min(62vh, 520px); min-height: 340px; display: block; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-sunk); touch-action: pan-y; }
+  .land-hud { position: absolute; top: 8px; left: 10px; font-family: var(--mono); font-size: .76rem; line-height: 1.45; color: var(--fg); background: color-mix(in srgb, var(--bg-elev) 80%, transparent); padding: 6px 9px; border-radius: 8px; border: 1px solid var(--border); pointer-events: none; }
+  .verdict-box { margin-top: 10px; }
+  .verdict-box ul { margin: 6px 0 0; padding-left: 18px; font-size: .88rem; }
+  .plots-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; margin-top: 10px; }
+  .plots-2 canvas.plot { height: 240px; }
+  .progress { height: 6px; background: var(--bg-sunk); border-radius: 99px; overflow: hidden; border: 1px solid var(--border); }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .1s; }
+  .tmr-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  @media (max-width: 560px) { .tmr-grid { grid-template-columns: 1fr; } }
+  .string-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; background: var(--bg-sunk); }
+  .string-card.silent { opacity: .55; border-style: dashed; }
+  .string-card h4 { margin: 0 0 6px; font-size: .95rem; }
+  .bits { font-family: var(--mono); font-size: .78rem; letter-spacing: .02em; word-break: break-all; }
+  .bits .flip { color: var(--bad); font-weight: 700; text-decoration: underline; }
+  .voter { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); }
+  .chk { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .chk .btn { padding: 4px 9px; font-size: .8rem; }
+  .src-badge { font-size: .7rem; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="page-hero">
+    <div class="eyebrow">Section 04 · Flight software & AI</div>
+    <h1>The software that flies the rocket</h1>
+    <p class="lead">A booster falling at the speed of a jet airliner has about half a minute to find a ship the size of a football field, slow to walking pace and touch down. No human could fly that. This page builds the pieces from first principles: redundant computers, estimating where you are (Kalman filter), keeping the rocket upright (thrust-vector control), deciding where to go (landing guidance), and the reliability math that ties it together. Then it gives you a booster to land.</p>
+    <nav class="toc">
+      <a href="#architecture">Architecture</a><a href="#navigation">Navigation</a><a href="#control">Control</a><a href="#guidance">Guidance</a>
+      <a href="#landing">Landing simulator</a><a href="#reliability">Reliability</a><a href="#autonomy">AI & autonomy</a><a href="#exercises">Exercises</a><a href="#sources">Sources</a>
+    </nav>
+  </section>
+
+  <!-- ===================================================================== -->
+  <h2 id="architecture">1. Flight software architecture</h2>
+  <p>Every guided vehicle runs the same loop many times a second: <strong>sense</strong> (read sensors), <strong>navigate</strong> (estimate position, velocity and attitude), <strong>guide</strong> (decide the path to the target), <strong>control</strong> (turn that into engine gimbal angles, throttle, fin and thruster commands) and <strong>actuate</strong>. Engineers call the middle three "GNC". What makes a launch vehicle special is that the loop must keep working while parts of the computer fail, with no chance to stop and reboot.</p>
+
+  <div class="arch" role="img" aria-label="Diagram: sensors feed navigation, then guidance, then control, then actuators. The navigation, guidance and control software runs on three redundant flight computers, each with two cores that cross-check; actuator controllers accept the agreeing commands. An independent autonomous flight safety system and telemetry sit alongside.">
+    <svg viewBox="0 0 960 470" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0 L10 5 L0 10 z"/></marker>
+      </defs>
+      <!-- sensors -->
+      <text x="20" y="28" class="ttl">Sensors</text>
+      <rect class="box h-sens" x="14" y="40" width="150" height="46"/><text x="26" y="60">IMU</text><text x="26" y="76" class="sub">gyros + accelerometers</text>
+      <rect class="box h-sens" x="14" y="96" width="150" height="46"/><text x="26" y="116">GPS receivers</text><text x="26" y="132" class="sub">position, velocity, time</text>
+      <rect class="box h-sens" x="14" y="152" width="150" height="46"/><text x="26" y="172">Altimeter</text><text x="26" y="188" class="sub">radar / laser (landing)</text>
+      <rect class="box h-sens" x="14" y="208" width="150" height="46"/><text x="26" y="228">Vehicle health</text><text x="26" y="244" class="sub">engines, tanks, valves</text>
+      <!-- redundant strings behind the GNC chain -->
+      <rect class="string" x="206" y="58" width="540" height="190" rx="12"/>
+      <rect class="string" x="198" y="50" width="540" height="190" rx="12"/>
+      <rect class="string" x="190" y="42" width="540" height="190" rx="12"/>
+      <text x="204" y="64" class="sub">Flight computer string A (B, C behind): 2 cores run the same code and compare</text>
+      <!-- nav -->
+      <rect class="box h-nav" x="206" y="84" width="160" height="104"/>
+      <text x="218" y="106" class="ttl">Navigation</text><text x="218" y="126" class="sub">Kalman filter fuses</text><text x="218" y="141" class="sub">IMU + GPS + altimeter</text><text x="218" y="160">→ state estimate</text><text x="218" y="176" class="sub">x̂, v̂, attitude, mass</text>
+      <!-- guidance -->
+      <rect class="box h-gnc" x="384" y="84" width="160" height="104"/>
+      <text x="396" y="106" class="ttl">Guidance</text><text x="396" y="126" class="sub">where to go next; landing</text><text x="396" y="141" class="sub">uses convex optimisation</text><text x="396" y="160">→ thrust vector</text><text x="396" y="176" class="sub">ignition time, throttle</text>
+      <!-- control -->
+      <rect class="box h-ctl" x="562" y="84" width="160" height="104"/>
+      <text x="574" y="106" class="ttl">Control</text><text x="574" y="126" class="sub">attitude & rate loops</text><text x="574" y="141" class="sub">(PID-like, filtered)</text><text x="574" y="160">→ actuator commands</text><text x="574" y="176" class="sub">gimbal, fins, valves</text>
+      <!-- cross-check -->
+      <text x="204" y="214" class="sub">core 1 ⇄ core 2: outputs differ → this string stays silent</text>
+      <!-- voter -->
+      <rect class="box h-rel" x="748" y="112" width="50" height="48"/><text x="755" y="134" style="font-size:11px">vote</text><text x="755" y="150" class="sub">2 of 3</text>
+      <!-- actuators -->
+      <text x="812" y="28" class="ttl">Actuators</text>
+      <rect class="box h-act" x="812" y="40" width="136" height="40"/><text x="822" y="64">Engine gimbals</text>
+      <rect class="box h-act" x="812" y="88" width="136" height="40"/><text x="822" y="112">Throttle / valves</text>
+      <rect class="box h-act" x="812" y="136" width="136" height="40"/><text x="822" y="160">Grid fins</text>
+      <rect class="box h-act" x="812" y="184" width="136" height="40"/><text x="822" y="202">Cold-gas</text><text x="822" y="217" class="sub">N₂ thrusters</text>
+      <rect class="box h-act" x="812" y="232" width="136" height="40"/><text x="822" y="256">Legs, igniters</text>
+      <!-- wires -->
+      <path class="wire" d="M164 63 H180 V136 H204" marker-end="url(#arr)"/>
+      <path class="wire" d="M164 119 H180"/><path class="wire" d="M164 175 H180"/><path class="wire" d="M164 231 H180 V136"/>
+      <path class="wire" d="M366 136 H382" marker-end="url(#arr)"/>
+      <path class="wire" d="M544 136 H560" marker-end="url(#arr)"/>
+      <path class="wire" d="M722 136 H746" marker-end="url(#arr)"/>
+      <path class="wire" d="M798 136 H806 V60 H810" marker-end="url(#arr)"/>
+      <path class="wire" d="M806 108 H810" marker-end="url(#arr)"/><path class="wire" d="M806 156 H810" marker-end="url(#arr)"/>
+      <path class="wire" d="M806 136 V252 H810" marker-end="url(#arr)"/><path class="wire" d="M806 204 H810" marker-end="url(#arr)"/>
+      <!-- feedback: vehicle dynamics -->
+      <path class="wire thin" d="M880 272 V300 H90 V256" marker-end="url(#arr)"/>
+      <text x="380" y="295" class="sub">vehicle dynamics: forces move the rocket, sensors measure the result (the loop closes, tens–hundreds of times a second)</text>
+      <!-- AFTS + telemetry + HIL -->
+      <rect class="box h-rel" x="14" y="330" width="290" height="120"/>
+      <text x="26" y="352" class="ttl">Autonomous flight safety</text>
+      <text x="26" y="372" class="sub">Independent computers + own GPS/IMU.</text>
+      <text x="26" y="388" class="sub">If the vehicle leaves its safe corridor,</text>
+      <text x="26" y="404" class="sub">it terminates the flight without waiting</text>
+      <text x="26" y="420" class="sub">for a ground command. Flown since 2017.</text>
+      <rect class="box h-nav" x="330" y="330" width="290" height="120"/>
+      <text x="342" y="352" class="ttl">Telemetry & ground</text>
+      <text x="342" y="372" class="sub">Thousands of channels streamed down;</text>
+      <text x="342" y="388" class="sub">ground can hold or abort before launch, but</text>
+      <text x="342" y="404" class="sub">the landing is fully onboard: radio delay</text>
+      <text x="342" y="420" class="sub">and dropouts rule out remote piloting.</text>
+      <rect class="box h-gnc" x="646" y="330" width="300" height="120"/>
+      <text x="658" y="352" class="ttl">Hardware-in-the-loop testing</text>
+      <text x="658" y="372" class="sub">Real flight computers and avionics laid out</text>
+      <text x="658" y="388" class="sub">on a table, wired as on the vehicle, fed by a</text>
+      <text x="658" y="404" class="sub">physics simulation: whole flights "flown" on</text>
+      <text x="658" y="420" class="sub">the ground, including injected failures.</text>
+    </svg>
+  </div>
+
+  <h3>What is public, and what is inferred</h3>
+  <p>SpaceX publishes little about its avionics. The table separates what its engineers have said in public (Reddit "ask me anything" sessions in 2013, 2020 and 2021, conference talks, Lars Blackmore's papers) from what is general aerospace practice that we infer applies.</p>
+  <div class="table-wrap">
+  <table class="pubtable">
+    <thead><tr><th>Claim</th><th>Status</th><th>Where it comes from</th></tr></thead>
+    <tbody>
+      <tr><td>Onboard computers run Linux with the PREEMPT_RT real-time patch, or are microcontrollers running bare-metal code; application-level autonomy software is C++.</td><td><span class="badge good">public</span></td><td>SpaceX software team AMA, 2020 (as summarised in press coverage)</td></tr>
+      <tr><td>Falcon 9 flight computers are ordinary x86 dual-core processors, three of them. Each "string" runs the flight software on both cores and compares; if the cores disagree the string sends nothing. Radiation tolerance comes from this redundancy, not radiation-hardened chips.</td><td><span class="badge good">public</span> <span class="badge warn">details reported</span></td><td>Engineers' public descriptions, widely reported (2013 AMA era, ZDNet 2020). Exact voting logic at the actuators isn't published.</td></tr>
+      <tr><td>Crew Dragon's touchscreen displays are built with Chromium and JavaScript; the safety-critical logic stays in the C++ flight software.</td><td><span class="badge good">public</span></td><td>SpaceX software AMA, 2020</td></tr>
+      <tr><td>Flight software is tested on "tables" of real flight avionics running simulated flights (hardware in the loop).</td><td><span class="badge good">public</span></td><td>SpaceX software AMAs 2013/2020</td></tr>
+      <tr><td>Landing guidance solves a convex optimisation problem onboard in a fraction of a second, using solvers generated by CVXGEN. Target accuracy: ~10 m on a drone ship.</td><td><span class="badge good">public</span></td><td>Blackmore, <em>The Bridge</em> (2016)</td></tr>
+      <tr><td>Falcon 9 uses an autonomous flight safety system instead of a human range-safety officer (first used as primary on CRS-10, Feb 2017).</td><td><span class="badge good">public</span></td><td>Range/AIAA reporting</td></tr>
+      <tr><td>Control loops run at tens to hundreds of Hz; engine controllers faster still; sensor fusion uses Kalman-type filters.</td><td><span class="badge warn">inferred</span></td><td>Standard GNC practice. SpaceX's actual rates and filter designs are not public.</td></tr>
+      <tr><td>Navigation uses an IMU, GPS and, for landing, a radar or laser altimeter.</td><td><span class="badge warn">inferred</span></td><td>IMU and GPS are standard on launch vehicles; the exact landing sensor suite isn't documented.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="callout note"><strong>Why not radiation-hardened processors?</strong> Rad-hard chips are generations behind and cost orders of magnitude more. A cosmic ray that flips a bit (a "single-event upset") in one core makes that core's output differ from its twin, so the string goes quiet and the other strings carry on. As long as upsets are rare and independent, three cheap computers that check each other can be more reliable than one expensive one. The <a href="#reliability">reliability section</a> puts numbers on that and lets you inject the bit flip yourself.</div>
+
+  <!-- ===================================================================== -->
+  <h2 id="navigation">2. Navigation: where am I? (the Kalman filter)</h2>
+  <p>No sensor tells the truth. An accelerometer is smooth and fast but has a small bias: integrate it twice and the position error grows like \(\tfrac12 b t^2\). An altimeter or GPS has no drift but is noisy from one reading to the next. The Kalman filter combines the two optimally: it <em>predicts</em> with the IMU and <em>corrects</em> with each fix, weighting each by how much it can be trusted.</p>
+  <h3>Derivation in one dimension</h3>
+  <p>Start with a scalar. You believe the altitude is \(\hat z^-\) with variance \(P^-\); a sensor reads \(z\) with noise variance \(R\). Look for the best linear blend \(\hat z^+ = \hat z^- + K(z - \hat z^-)\). Its error is \(e^+ = (1-K)e^- + K v\), with \(e^-\) and the sensor noise \(v\) independent, so</p>
+  $$ P^+ = (1-K)^2 P^- + K^2 R . $$
+  <p>Setting \(dP^+/dK = 0\):</p>
+  $$ K = \frac{P^-}{P^- + R}, \qquad P^+ = (1-K)P^- = \frac{P^- R}{P^- + R} \quad\Leftrightarrow\quad \frac{1}{P^+} = \frac{1}{P^-} + \frac{1}{R}. $$
+  <p>Information adds. A precise sensor (small \(R\)) gets \(K \to 1\); a poor one gets \(K \to 0\). Between fixes the state is propagated with the IMU. For state \(\mathbf x = [z,\ v,\ b]^\mathsf{T}\) (altitude, vertical speed, accelerometer bias) and accelerometer reading \(a_m\):</p>
+  $$ \text{predict:}\quad \hat{\mathbf x}^- = F\hat{\mathbf x} + B a_m,\quad P^- = F P F^\mathsf{T} + Q, \qquad F = \begin{bmatrix}1 & \Delta t & -\tfrac12\Delta t^2\\ 0 & 1 & -\Delta t\\ 0&0&1\end{bmatrix},\ B = \begin{bmatrix}\tfrac12\Delta t^2\\ \Delta t\\ 0\end{bmatrix} $$
+  $$ \text{update:}\quad K = P^- H^\mathsf{T}(H P^- H^\mathsf{T} + R)^{-1},\quad \hat{\mathbf x}^+ = \hat{\mathbf x}^- + K(z - H\hat{\mathbf x}^-),\quad P^+ = (I - KH)P^-,\qquad H = [1\ \ 0\ \ 0]. $$
+  <details class="derive"><summary>Why the filter can estimate a bias it never measures directly</summary>
+    <p>The bias enters the prediction through \(F\): a bias error makes the predicted altitude curve away from the fixes in a characteristic \(t^2\) way. The off-diagonal terms of \(P\) record that correlation, so the gain row for \(b\) is non-zero and each altitude innovation nudges the bias estimate. Observability, formally, is the rank of \([H;\,HF;\,HF^2]\), which is 3 here. Turn off "Estimate accelerometer bias" in the lab below to see the 2-state filter lag behind the truth.</p>
+    <p>For a scalar random walk \(x_{k+1} = x_k + w\) (variance \(Q\)) the covariance converges to the root of \(P^{-2} - QP^- - QR = 0\), whatever the starting \(P\). The <a href="validation.html">validation page</a> checks the iterated filter against that closed form.</p>
+  </details>
+  <table class="symbols"><tbody>
+    <tr><td>\(\hat z^-,\ \hat z^+\)</td><td>estimate before / after using the measurement</td></tr>
+    <tr><td>\(P\)</td><td>error variance (covariance matrix for a vector state)</td></tr>
+    <tr><td>\(R\)</td><td>measurement-noise variance (altimeter σ²)</td></tr>
+    <tr><td>\(Q\)</td><td>process noise: how much the prediction can be wrong per step (accelerometer noise through \(B\))</td></tr>
+    <tr><td>\(K\)</td><td>Kalman gain: the weight given to the new measurement</td></tr>
+    <tr><td>\(F,\ B,\ H\)</td><td>state-transition, input and measurement matrices</td></tr>
+  </tbody></table>
+
+  <div class="lab" id="lab-kf">
+    <div class="controls">
+      <p class="lab-title">Fuse an altimeter with an IMU</p>
+      <div class="field"><label for="kf-alt">Altimeter noise σ <output for="kf-alt"></output></label><input type="range" id="kf-alt" min="0.5" max="15" step="0.5" value="5"></div>
+      <div class="field"><label for="kf-rate">Altimeter rate <output for="kf-rate"></output></label><input type="range" id="kf-rate" min="1" max="20" step="1" value="5"></div>
+      <div class="field"><label for="kf-acc">Accelerometer noise σ <output for="kf-acc"></output></label><input type="range" id="kf-acc" min="0.01" max="1" step="0.01" value="0.15"></div>
+      <div class="field"><label for="kf-bias">Accelerometer bias <output for="kf-bias"></output></label><input type="range" id="kf-bias" min="0" max="0.2" step="0.005" value="0.05"></div>
+      <label class="checkbox"><input type="checkbox" id="kf-estbias" checked> Estimate accelerometer bias (3-state filter)</label>
+      <div class="row"><button class="btn" id="kf-reseed">New noise</button></div>
+      <div class="stats" id="kf-stats"></div>
+    </div>
+    <div class="output">
+      <canvas class="plot" id="kf-plot" aria-label="Altitude: truth, altimeter fixes, IMU-only, and Kalman estimate"></canvas>
+      <canvas class="plot" id="kf-err" style="height:200px" aria-label="Estimation error and the filter's own 2-sigma bound"></canvas>
+      <p class="small muted">Top: a vehicle hopping around 100 m. Bottom: the filter's error and its own ±2σ bound. A healthy filter's error stays inside the bound about 95% of the time. IMU-only dead reckoning (orange) drifts away quadratically because of the bias.</p>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="control">3. Control: keeping a rocket upright</h2>
+  <p>A rocket steered by gimballing its engine at the bottom is an <strong>inverted pendulum</strong>, like balancing a broom on your hand. Aerodynamic forces acting ahead of the centre of mass push it further over the more it tilts. Linearised about vertical:</p>
+  $$ I\ddot\theta = M_\alpha\,\theta - T\ell\sin\delta + M_{gust} \quad\Rightarrow\quad \ddot\theta = a\,\theta - b\,\delta + d(t),\qquad a = \frac{M_\alpha}{I},\ b = \frac{T\ell}{I}. $$
+  <p>With no control, \(\theta \propto e^{\sqrt a\,t}\): unstable. A PID law \(\delta = K_p\theta + K_i\!\int\!\theta\,dt + K_d\dot\theta\) gives the closed loop \(\ddot\theta + bK_d\dot\theta + (bK_p - a)\theta = 0\) (ignoring \(K_i\)), so we need \(bK_p > a\) for a restoring "spring" and \(K_d > 0\) for damping. The real limits are the gimbal angle (a few degrees on Merlin-class engines, est.), the actuator's speed and bandwidth, and the flexible body's bending modes, which the controller must not excite (see exercise 7 on aliasing).</p>
+  <table class="symbols"><tbody>
+    <tr><td>\(\theta,\ \delta\)</td><td>tilt from vertical; engine gimbal angle</td></tr>
+    <tr><td>\(T,\ \ell,\ I\)</td><td>thrust; distance gimbal → centre of mass; pitch moment of inertia</td></tr>
+    <tr><td>\(M_\alpha\)</td><td>destabilising aerodynamic moment per radian of tilt</td></tr>
+    <tr><td>\(K_p, K_i, K_d\)</td><td>proportional, integral, derivative gains (radians of gimbal per radian of tilt)</td></tr>
+  </tbody></table>
+  <div class="lab" id="lab-tvc">
+    <div class="controls">
+      <p class="lab-title">Balance the booster</p>
+      <div class="field"><label for="tvc-kp">Kp (stiffness) <output for="tvc-kp"></output></label><input type="range" id="tvc-kp" min="0" max="6" step="0.05" value="2"></div>
+      <div class="field"><label for="tvc-kd">Kd (damping) <output for="tvc-kd"></output></label><input type="range" id="tvc-kd" min="0" max="4" step="0.05" value="1.2"></div>
+      <div class="field"><label for="tvc-ki">Ki (trim) <output for="tvc-ki"></output></label><input type="range" id="tvc-ki" min="0" max="2" step="0.05" value="0.2"></div>
+      <div class="field"><label for="tvc-lim">Gimbal limit <output for="tvc-lim"></output></label><input type="range" id="tvc-lim" min="0.5" max="10" step="0.5" value="5"></div>
+      <div class="field"><label for="tvc-th0">Initial tilt <output for="tvc-th0"></output></label><input type="range" id="tvc-th0" min="0" max="20" step="0.5" value="4"></div>
+      <div class="field"><label for="tvc-gust">Gust torque at t = 6 s <output for="tvc-gust"></output></label><input type="range" id="tvc-gust" min="0" max="2000" step="50" value="300"></div>
+      <div id="tvc-result"></div>
+    </div>
+    <div class="output">
+      <canvas class="plot" id="tvc-plot" aria-label="Tilt and gimbal angle versus time"></canvas>
+      <p class="small muted">Model: 30 t booster, 600 kN thrust, 15 m lever arm, I = 4.2 × 10⁶ kg·m², a = 0.6 s⁻², 50 ms actuator lag (all est.). Try Kp below the stability line, Kd = 0, or a 1° gimbal limit with a 15° initial tilt.</p>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="guidance">4. Guidance: getting to zero speed at zero height</h2>
+  <p>Falcon 9 lands on <strong>one</strong> Merlin engine. Even at its minimum throttle (about 40%, est.) that engine out-lifts a nearly empty booster: thrust-to-weight is above 1. So the booster <strong>cannot hover</strong>. If it stops above the deck it starts climbing, and the engine can't be shut down and relit in time. It has to reach zero velocity at exactly zero altitude. This is the "hoverslam" or "suicide burn", and timing it is the guidance problem.</p>
+  <h3>The one-dimensional answer</h3>
+  <p>With constant thrust acceleration \(a_T\) and no drag, braking from speed \(v\) takes the height \(h = v^2 / \big(2(a_T - g)\big)\). Light too late and no throttle setting can stop you in time; light too early at full thrust and you stop high. Real guidance therefore plans the burn at <em>part</em> throttle, here about 62% of maximum, which leaves margin both ways: it can brake harder if the air was thinner than expected, or softer if it was thicker.</p>
+  <h3>ZEM/ZEV optimal feedback guidance</h3>
+  <p>For a point mass in uniform gravity, \(\dot{\mathbf r} = \mathbf v,\ \dot{\mathbf v} = \mathbf u + \mathbf g\), define what would happen if the engine did nothing from now on:</p>
+  $$ \mathrm{ZEM} = \mathbf r_f - \left(\mathbf r + \mathbf v\,t_{go} + \tfrac12\mathbf g\,t_{go}^2\right), \qquad \mathrm{ZEV} = \mathbf v_f - \left(\mathbf v + \mathbf g\,t_{go}\right). $$
+  <p>The control that reaches \((\mathbf r_f, \mathbf v_f)\) in time \(t_{go}\) with the least \(\int|\mathbf u|^2dt\) is</p>
+  $$ \boxed{\ \mathbf u = \frac{6\,\mathrm{ZEM}}{t_{go}^2} - \frac{2\,\mathrm{ZEV}}{t_{go}}\ } $$
+  <details class="derive"><summary>Derivation (Pontryagin, three lines)</summary>
+    <p>Hamiltonian \(H = \tfrac12|\mathbf u|^2 + \boldsymbol\lambda_r\!\cdot\mathbf v + \boldsymbol\lambda_v\!\cdot(\mathbf u + \mathbf g)\). Costate equations: \(\dot{\boldsymbol\lambda}_r = 0,\ \dot{\boldsymbol\lambda}_v = -\boldsymbol\lambda_r\), so \(\boldsymbol\lambda_v\) is linear in time, and \(\partial H/\partial\mathbf u = 0\) gives \(\mathbf u = -\boldsymbol\lambda_v = \mathbf c_0 + \mathbf c_1 s\) with \(s\) the time from now.</p>
+    <p>Integrate over \(T = t_{go}\). The control must supply exactly the missing velocity and position: \(\mathbf c_0T + \mathbf c_1T^2/2 = \mathrm{ZEV}\) and \(\mathbf c_0T^2/2 + \mathbf c_1T^3/6 = \mathrm{ZEM}\). Solving gives \(\mathbf c_0 = 6\mathrm{ZEM}/T^2 - 2\mathrm{ZEV}/T\). Applying \(\mathbf c_0\) now and re-solving every cycle turns the open-loop optimum into a feedback law that corrects for disturbances.</p>
+    <p>Nice consequence: choose \(t_{go} = 2h/(|v_z| + v_f)\), the time a <em>constant</em> deceleration would take, and the vertical ZEM/ZEV command reduces exactly to \(a_z = (v_z^2 - v_f^2)/(2h) + g\), the suicide-burn law. ZEM/ZEV is its multi-dimensional, optimal generalisation, and steers sideways at the same time.</p>
+  </details>
+  <p>ZEM/ZEV has no idea that thrust is bounded between a minimum and a maximum, that the thrust direction is limited, or that the booster must stay above a glide-slope cone near the ground. Our simulator handles those by clipping, which works but isn't optimal. That gap is what convex optimisation fills.</p>
+  <h3>Convex guidance (G-FOLD) and lossless convexification</h3>
+  <p>The real problem: minimise propellant \(\int\|\mathbf T\|\,dt\) subject to the dynamics, \(\dot m = -\|\mathbf T\|/v_e\), a glide-slope cone, a pointing limit, and \(\rho_1 \le \|\mathbf T\| \le \rho_2\). The <strong>lower</strong> thrust bound makes the feasible set a hollow shell, which is non-convex: local solvers can stall or fail, which is unacceptable onboard. Açıkmeşe and Ploen (2007) and later Açıkmeşe, Carson and Blackmore (2013) showed a relaxation that is <em>lossless</em>: introduce a slack \(\Gamma\) with</p>
+  $$ \|\mathbf T\| \le \Gamma, \qquad \rho_1 \le \Gamma \le \rho_2, $$
+  <p>a convex second-order cone. They proved that the optimum of the relaxed problem satisfies \(\|\mathbf T\| = \Gamma\), so it is also feasible and optimal for the original problem. With a change of variables for the mass, the whole thing becomes a <strong>second-order cone program</strong> that interior-point methods solve to global optimality in a predictable, bounded number of iterations. That is what makes it certifiable for flight. JPL tested it as G-FOLD on Masten's Xombie rocket (2012–13). Blackmore (2016) writes that SpaceX uses CVXGEN (Mattingley & Boyd) to generate custom solver code that runs onboard "in a fraction of a second". This is <strong>optimisation, not machine learning</strong>. The current flight algorithms are not public in detail.</p>
+
+  <!-- ===================================================================== -->
+  <h2 id="landing">5. Landing simulator</h2>
+  <p class="muted">2-D point mass (downrange \(x\), altitude \(z\)) starting at 6 km, falling at terminal velocity, mass ≈ 35 t. Modelled: one Merlin 1D (thrust varies with ambient pressure, minimum throttle 40% est.), a 12° thrust-tilt limit (est.), mass depletion, drag with \(C_D = 1\) (est.) in the US-1976 atmosphere, wind with gusts, grid-fin steering before ignition (lift up to 0.15 × drag, est.), noisy IMU / GPS / altimeter feeding a Kalman filter per axis, and guidance at 50 Hz. Physics step 10 ms. Every run is reproducible from its seed.</p>
+  <div class="lab" id="lab-land">
+    <div class="controls">
+      <p class="lab-title">Land the booster</p>
+      <div class="seg" role="group" aria-label="Guidance mode"><button data-gm="on" aria-pressed="true">Guided (ZEM/ZEV)</button><button data-gm="off" aria-pressed="false">Open loop</button></div>
+      <div class="field"><label for="ld-wind">Mean wind <output for="ld-wind"></output></label><input type="range" id="ld-wind" min="-15" max="15" step="0.5" value="5"></div>
+      <div class="field"><label for="ld-gust">Gusts (σ) <output for="ld-gust"></output></label><input type="range" id="ld-gust" min="0" max="6" step="0.25" value="2"></div>
+      <div class="field"><label for="ld-noise">Sensor noise <output for="ld-noise"></output></label><input type="range" id="ld-noise" min="0" max="3" step="0.1" value="1"></div>
+      <div class="field"><label for="ld-x0">Initial lateral offset <output for="ld-x0"></output></label><input type="range" id="ld-x0" min="-400" max="400" step="10" value="150"></div>
+      <label class="checkbox"><input type="checkbox" id="ld-ovr"> Override ignition altitude</label>
+      <div class="field"><label for="ld-ign">Light the engine at <output for="ld-ign"></output></label><input type="range" id="ld-ign" min="500" max="6000" step="50" value="2500" disabled></div>
+      <div class="field"><label for="ld-seed">Seed</label><input type="number" id="ld-seed" min="1" max="99999" step="1" value="1"></div>
+      <div class="row"><button class="btn primary" id="ld-fly">Fly</button><button class="btn" id="ld-random">Random seed</button></div>
+      <div class="verdict-box" id="ld-verdict" aria-live="polite"></div>
+    </div>
+    <div class="output">
+      <div class="land-wrap">
+        <canvas id="land-canvas" aria-label="Side view of the booster descending to the drone ship"></canvas>
+        <div class="land-hud" id="land-hud"></div>
+      </div>
+      <div class="stats" id="ld-stats" style="margin-top:10px"></div>
+      <div class="plots-2">
+        <canvas class="plot" id="ld-phase" aria-label="Speed versus altitude with braking limits"></canvas>
+        <canvas class="plot" id="ld-thr" aria-label="Throttle and speed versus time"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="callout"><strong>Success criteria (ours, est.).</strong> Touchdown vertical speed ≤ 4 m/s and horizontal speed ≤ 2 m/s: our assumption of what crushable landing legs absorb, since SpaceX doesn't publish limits. Miss distance ≤ 10 m: Blackmore's stated drone-ship accuracy target (the deck is roughly 90 × 50 m). The engine must not run dry, and the booster must not stop above the deck. Since minimum-throttle T/W &gt; 1, the sim then shuts the engine down and the stage falls.</div>
+  <details class="derive"><summary>How the simulated guidance works (and where it departs from the real thing)</summary>
+    <p><strong>Before ignition</strong> the grid fins steer toward the ship with a ZEM/ZEV-style lateral command, limited to the lift they can make. <strong>Ignition</strong> happens when the thrust acceleration needed for a constant-deceleration stop, \((v^2 - v_f^2)/2h + g - \tfrac13 D/m\), reaches 62% of the engine's maximum. The \(\tfrac13\) is the average of drag \(\propto v^2\) over a burn whose speed falls linearly. <strong>During the burn</strong> the ZEM/ZEV law is flown twice in sequence: first to a "gate" 30 m above the deck, arriving at the speed from which a gentle 3 m/s² deceleration ends at 1 m/s; then (switching 0.3 s before the gate, since ZEM/ZEV commands grow like 1/t_go² close to any waypoint) to the deck itself, aimed 0.5 m "through" it so sensor noise can't make the stage stop just above. The estimated drag is subtracted from the command, the thrust vector is clipped to 12° from vertical, and the throttle is clipped to [40%, 100%].</p>
+    <p><strong>Open loop</strong> replays the throttle history of a calm, noise-free, on-target landing from the same start, with no steering. It lands perfectly when reality matches the plan and drifts with the wind when it doesn't. That gap is the whole argument for feedback.</p>
+    <p><strong>Left out</strong>: attitude dynamics (the booster is a point mass, so "tilt" is the thrust direction), the entry burn and supersonic aerodynamics (we start subsonic), plume–aero interaction, engine start transients, ship motion, leg dynamics and propellant slosh. Real guidance uses convex optimisation with proper constraints rather than our clipped ZEM/ZEV.</p>
+  </details>
+
+  <h3>Monte Carlo: how robust is it?</h3>
+  <p>One successful landing proves little. Run 200 landings with random wind (up to ± the maximum), gust strength, sensor noise (0.5–1.5× the setting), lateral offset and drift, and look at the spread. This is how GNC engineers argue a design is safe: thousands of dispersed runs, not one demo. Runs use a 20 ms physics step in a background thread.</p>
+  <div class="lab" id="lab-mc">
+    <div class="controls">
+      <p class="lab-title">200 landings</p>
+      <div class="field"><label for="mc-wind">Max wind <output for="mc-wind"></output></label><input type="range" id="mc-wind" min="0" max="20" step="1" value="10"></div>
+      <div class="field"><label for="mc-noise">Sensor noise <output for="mc-noise"></output></label><input type="range" id="mc-noise" min="0" max="3" step="0.1" value="1"></div>
+      <div class="field"><label for="mc-off">Max offset <output for="mc-off"></output></label><input type="range" id="mc-off" min="0" max="500" step="10" value="300"></div>
+      <label class="checkbox"><input type="checkbox" id="mc-open"> Open loop instead of guided</label>
+      <div class="row"><button class="btn primary" id="mc-run">Run 200 landings</button></div>
+      <div class="progress" aria-hidden="true"><div id="mc-bar"></div></div>
+      <div class="stats" id="mc-stats"></div>
+      <div id="mc-fails" class="small muted"></div>
+    </div>
+    <div class="output">
+      <canvas class="plot" id="mc-plot" aria-label="Touchdown scatter: lateral position versus vertical speed"></canvas>
+      <p class="small muted">Each dot is one touchdown: where it landed relative to the target, and how hard. The dashed lines are the success limits.</p>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="reliability">6. Reliability: why three computers and nine engines</h2>
+  <h3>k-of-n systems</h3>
+  <p>If each of \(n\) independent units works with probability \(R\), the number that work is binomial, so the probability that at least \(k\) work is</p>
+  $$ R_{k/n} = \sum_{j=k}^{n} \binom{n}{j} R^{j}(1-R)^{n-j}. $$
+  <p>Triple modular redundancy (TMR) is 2-of-3: \(R_{TMR} = R^3 + 3R^2(1-R) = 3R^2 - 2R^3\). For \(R\) near 1 the failure probability is \(\approx 3(1-R)^2\): it takes two independent failures to lose the system. But TMR is worse than a single unit when \(R &lt; \tfrac12\), and for exponential lifetimes its mean time to failure is \(5/(6\lambda)\), <em>shorter</em> than one unit's \(1/\lambda\). Redundancy buys reliability for a mission of bounded length, not longevity. Real systems repair or reconfigure, for example by dropping a failed string so the remaining two cross-check.</p>
+  <p><strong>Engine out.</strong> Falcon 9 can lose an engine during parts of ascent and still reach orbit: on CRS-1 (Oct 2012) one Merlin shut down and Dragon still reached the ISS, although the secondary payload ended up in a lower orbit than planned. Super Heavy's 33 Raptors are meant to tolerate several engine-outs. More engines means more failures, so the question is whether tolerance grows faster than the failure count.</p>
+  <div class="callout warn"><strong>The independence trap.</strong> These formulas assume failures are independent. An engine that fails explosively can take out its neighbours; a software bug runs identically on all three "redundant" computers. Common-cause failures usually dominate once you have redundancy, which is why engine bays are shielded and why identical software must be tested so heavily. Some programmes add dissimilar backup software for the same reason.</div>
+  <div class="lab" id="lab-rel">
+    <div class="controls">
+      <p class="lab-title">Engine-out calculator</p>
+      <div class="seg" role="group" aria-label="Preset"><button data-pre="f9" aria-pressed="true">Falcon 9 (9)</button><button data-pre="sh" aria-pressed="false">Super Heavy (33)</button></div>
+      <div class="field"><label for="rel-n">Engines <output for="rel-n"></output></label><input type="range" id="rel-n" min="1" max="40" step="1" value="9"></div>
+      <div class="field"><label for="rel-k">Engines required <output for="rel-k"></output></label><input type="range" id="rel-k" min="1" max="40" step="1" value="8"></div>
+      <div class="field"><label for="rel-r">Per-engine reliability <output for="rel-r"></output></label><input type="range" id="rel-r" min="0.9" max="0.9999" step="0.0001" value="0.995"></div>
+      <div class="stats" id="rel-stats"></div>
+    </div>
+    <div class="output">
+      <canvas class="plot" id="rel-plot" aria-label="Mission success probability versus per-engine reliability"></canvas>
+      <p class="small muted">Per-engine reliability values are illustrative, not published figures. The curves show the same engine count requiring all, all but one, all but two, and all but three engines.</p>
+    </div>
+  </div>
+
+  <h3>Fault injection: triple redundancy with dual-core cross-checks</h3>
+  <p>Three strings each compute the next throttle command (a 16-bit word) on two cores. A string whose cores disagree stays silent. The actuator side takes the majority of the strings still talking. Inject faults and watch what survives.</p>
+  <div class="lab" id="lab-tmr" style="grid-template-columns:1fr">
+    <div class="output">
+      <div class="tmr-grid" id="tmr-strings"></div>
+      <div class="voter" id="tmr-voter" aria-live="polite"></div>
+      <div class="row" style="margin-top:10px"><button class="btn" id="tmr-reset">Reset all</button><button class="btn" id="tmr-random">Random cosmic ray</button><span class="muted small" id="tmr-hint">Tip: flip a bit in one core, then flip the same bit in its twin.</span></div>
+      <canvas class="plot" id="tmr-plot" style="margin-top:12px" aria-label="Reliability of single unit versus TMR"></canvas>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="autonomy">7. AI and autonomy: what's actually public</h2>
+  <p>"AI" gets attached to anything automatic. The autonomy that flies SpaceX vehicles, as far as the public record shows, is classical estimation, control and optimisation. It is predictable, analysable and testable, which is why it is used.</p>
+  <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr))">
+    <div class="card"><h3>Autonomous landing <span class="badge good src-badge">public</span></h3><p>Booster landings use onboard convex-optimisation guidance (lossless convexification, custom solvers generated by CVXGEN), plus the navigation and control loops above. <strong>Not machine learning.</strong> Every landing is computed onboard. Ground controllers can't fly it, and radio delays and dropouts wouldn't allow it anyway. <span class="muted small">Source: Blackmore 2016; Blackmore's 2017 Berkeley talk.</span></p></div>
+    <div class="card"><h3>Dragon docking <span class="badge good src-badge">public</span></h3><p>Crew and Cargo Dragon dock with the ISS autonomously, first on Demo-1 (March 2019), using relative-navigation sensors (lidar and imagers; Dragon 1's "DragonEye" sensor) and onboard guidance. Crews can monitor, pause, retreat or take over manually from the touchscreens. <span class="muted small">Source: NASA/press coverage of Demo-1.</span></p></div>
+    <div class="card"><h3>Starlink collision avoidance <span class="badge good src-badge">public</span></h3><p>Starlink satellites manoeuvre autonomously using tracking data on other objects, and SpaceX reports the counts to the FCC every six months: about <strong>50,000</strong> manoeuvres in Dec 2023–May 2024, <strong>148,696</strong> in Jun–Nov 2025 and <strong>207,152</strong> in Dec 2025–May 2026. SpaceX manoeuvres at a collision probability of about 1 in 1,000,000, roughly 100× more conservative than the common industry threshold. <span class="muted small">Source: SpaceX semi-annual reports to the FCC as reported by Space.com.</span></p></div>
+    <div class="card"><h3>Autonomous flight safety <span class="badge good src-badge">public</span></h3><p>The AFSS replaces the human range-safety officer's destruct button with onboard computers that compare the vehicle's own GPS/IMU state against pre-approved flight corridors. It was first used as the primary system on CRS-10 (Feb 2017). The logic is rule-based, not learned, and is approved by range-safety authorities.</p></div>
+  </div>
+  <h3>Where machine learning plausibly fits <span class="badge warn">industry practice / speculation</span></h3>
+  <p>The following describes how aerospace and manufacturing companies <em>commonly</em> use ML. None of it is a claim about specific SpaceX systems.</p>
+  <ul>
+    <li><strong>Manufacturing inspection.</strong> Computer vision on welds, X-ray and CT images and composite layups to flag defects for a human to review.</li>
+    <li><strong>Telemetry anomaly detection.</strong> Models trained on thousands of nominal test-stand firings and flights that flag channels behaving unusually, so engineers know where to look. The decision stays with people and certified limits.</li>
+    <li><strong>Network operations.</strong> Large constellations need traffic routing, beam scheduling and spectrum management, where optimisation and learned predictors are natural tools.</li>
+    <li><strong>Design exploration.</strong> Surrogate models that stand in for expensive CFD or structural simulations during trade studies.</li>
+  </ul>
+  <div class="callout note"><strong>Why flight-critical loops stay classical.</strong> Certification needs bounded, explainable behaviour: proofs of convergence (convex solvers), stability margins (control), consistency checks (Kalman innovations). A neural-network policy can perform well on average but is hard to bound in the tails, and tail behaviour is what a landing has to get right. Research on learned guidance exists (for example adaptive ZEM/ZEV tuned by reinforcement learning), but we know of no public evidence that it flies on operational launch vehicles.</div>
+
+  <h2 id="exercises">Exercises</h2>
+  <div id="exercise-list"></div>
+
+  <h2 id="sources">Sources</h2>
+  <ol class="source-list">
+    <li><a href="https://nap.nationalacademies.org/read/23659/chapter/10">L. Blackmore, "Autonomous Precision Landing of Space Rockets", NAE Frontiers of Engineering / <em>The Bridge</em> 46(4), 2016</a>: CVXGEN onboard, ~10 m drone-ship target, ~35 t F9R, no-hover constraint.</li>
+    <li><a href="https://eecs.berkeley.edu/research/colloquium/171018-2/">L. Blackmore, "Landing SpaceX's reusable rockets", UC Berkeley EECS colloquium, Oct 2017</a></li>
+    <li><a href="https://doi.org/10.2514/1.27553">B. Açıkmeşe, S. R. Ploen, "Convex programming approach to powered descent guidance for Mars landing", <em>JGCD</em> 30(5), 2007</a></li>
+    <li><a href="https://doi.org/10.1109/TCST.2012.2237346">B. Açıkmeşe, J. M. Carson III, L. Blackmore, "Lossless convexification of nonconvex control bound and pointing constraints of the soft landing optimal control problem", <em>IEEE TCST</em> 21(6), 2013</a></li>
+    <li><a href="https://doi.org/10.2514/1.47202">L. Blackmore, B. Açıkmeşe, D. P. Scharf, "Minimum-landing-error powered-descent guidance for Mars landing using convex optimization", <em>JGCD</em> 33(4), 2010</a></li>
+    <li><a href="https://doi.org/10.1007/s11081-011-9176-9">J. Mattingley, S. Boyd, "CVXGEN: a code generator for embedded convex optimization", <em>Optimization and Engineering</em> 13, 2012</a></li>
+    <li><a href="https://scholar.hit.edu.cn/en/publications/applications-of-generalized-zero-effort-miss-zero-effort-velocity/">Y. Guo, M. Hawkins, B. Wie, "Applications of generalized zero-effort-miss/zero-effort-velocity feedback guidance algorithm", <em>JGCD</em> 36(3), 2013</a></li>
+    <li><a href="https://doi.org/10.1115/1.3662552">R. E. Kalman, "A new approach to linear filtering and prediction problems", <em>J. Basic Engineering</em> 82, 1960</a></li>
+    <li><a href="https://www.reddit.com/r/IAmA/comments/1853ap/">SpaceX software engineers AMA, r/IAmA, Feb 2013</a></li>
+    <li><a href="https://science.slashdot.org/story/20/06/06/2023249">"How SpaceX uses Linux, Chromium, C++ and open-source libraries" (ZDNet summary of the June 2020 SpaceX software AMA, via Slashdot)</a></li>
+    <li><a href="https://spaceexplored.com/2021/05/14/ask-spacex-anything-starship-dragon-and-starlink-software-developers-hosting-ama/">SpaceX software AMA, May 2021 (Starship, Dragon, Starlink teams)</a></li>
+    <li><a href="https://spaceflight101.com/?p=8846">Spaceflight101, "Flight Data: Falcon 9 / Jason-3": landing burn 30–35 s</a></li>
+    <li><a href="https://aerospaceamerica.aiaa.org/features/termination-shock/">Aerospace America, "Termination shock" (autonomous flight termination)</a> and <a href="https://dsiac.dtic.mil/articles/automated-flight-safety-improving-space-access">DSIAC, "Automated flight safety improving space access"</a></li>
+    <li><a href="https://www.technologyreview.com/2019/03/04/103353/spacexs-dragon-capsule-has-successfully-docked-with-the-international-space/">MIT Technology Review, Crew Dragon Demo-1 autonomous docking, 2019</a></li>
+    <li><a href="https://www.space.com/spacex-starlink-50000-collision-avoidance-maneuvers-space-safety">Space.com, "SpaceX Starlink satellites made 50,000 collision-avoidance maneuvers in the past 6 months" (2024)</a></li>
+    <li><a href="https://www.space.com/space-exploration/satellites/every-spacex-starlink-satellite-has-to-dodge-a-collision-almost-weekly-and-experts-fear-the-worst">Space.com, "Every SpaceX Starlink satellite has to dodge a collision almost weekly" (2026): 148,696 and 207,152 manoeuvres</a></li>
+    <li><a href="https://en.wikipedia.org/wiki/SpaceX_CRS-1">Wikipedia, SpaceX CRS-1 (engine-out on ascent, 2012)</a></li>
+    <li><a href="https://en.wikipedia.org/wiki/Triple_modular_redundancy">Wikipedia, Triple modular redundancy</a></li>
+    <li><a href="https://www.spacex.com/vehicles/falcon-9/">SpaceX, Falcon 9 vehicle page</a> and <a href="https://en.wikipedia.org/wiki/SpaceX_Merlin">Wikipedia, SpaceX Merlin</a> (thrust; minimum throttle est.)</li>
+    <li><a href="https://ntrs.nasa.gov/citations/19770009539">U.S. Standard Atmosphere, 1976</a></li>
+  </ol>
+</main>
+</body>
+</html>

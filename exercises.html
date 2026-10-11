@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exercises · Moonshot</title>
+<meta name="description" content="Every practice problem on the site in one place: rocket equation, nozzles, orbits, structures, guidance, Starlink, cost and the Moon, with hints and worked solutions.">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="css/style.css">
+<script type="module" src="js/common.js"></script>
+<script type="module" src="js/pages/exercises.js"></script>
+<style>
+  .filters { display: flex; flex-direction: column; gap: 10px; position: sticky; top: 56px; z-index: 5; background: var(--bg); padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .tag-filter .tag { cursor: pointer; opacity: .45; }
+  .tag-filter .tag[aria-pressed="true"] { opacity: 1; outline: 2px solid oklch(var(--tag-l) var(--tag-c) var(--h)); outline-offset: 1px; }
+  .section-progress { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 18px; }
+  .section-progress a { color: var(--fg); font-size: .88rem; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="page-hero">
+    <div class="eyebrow">Practice</div>
+    <h1>Exercises</h1>
+    <p class="lead">Work them out on paper, then type your number. Answers are checked to within a couple of percent, hints come one at a time, and every solution shows the working. All answers are computed by the same physics code the site runs. Progress is saved in this browser.</p>
+    <div class="card"><div class="row"><strong id="ex-total">—</strong><span class="spacer"></span><span class="muted small">Exam mode (hide solutions) is in Settings, <kbd>⌘</kbd> <kbd>,</kbd></span></div>
+      <div class="progress-bar" style="margin:8px 0 14px"><div id="ex-bar"></div></div>
+      <div class="section-progress" id="ex-sections"></div></div>
+  </section>
+  <div class="filters">
+    <div class="tags tag-filter" id="tag-filter" role="group" aria-label="Filter by topic"></div>
+    <div class="row small">
+      <span class="muted">Difficulty</span>
+      <div class="seg" role="group" aria-label="Difficulty"><button data-diff="0" aria-pressed="true">All</button><button data-diff="1" aria-pressed="false">●</button><button data-diff="2" aria-pressed="false">●●</button><button data-diff="3" aria-pressed="false">●●●</button></div>
+      <label class="checkbox"><input type="checkbox" id="hide-solved"> Hide solved</label>
+      <span class="spacer"></span><button class="btn" id="clear-filters">Clear filters</button>
+    </div>
+  </div>
+  <div id="ex-groups"></div>
+</main>
+</body>
+</html>

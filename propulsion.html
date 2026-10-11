@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Propulsion · Moonshot</title>
+<meta name="description" content="How rocket engines make thrust: the rocket equation, combustion, nozzle theory and engine cycles, from Merlin to Raptor.">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="css/style.css">
+<script type="module" src="js/common.js"></script>
+<script type="module" src="js/pages/propulsion.js"></script>
+<style>
+  .cycle-svg text { fill: var(--fg); font: 12px var(--font); }
+  .cycle-svg .muted-t { fill: var(--fg-muted); font-size: 11px; }
+  .cycle-svg .box { fill: var(--bg-sunk); stroke: var(--border); }
+  .cycle-svg .ox { stroke: oklch(0.65 0.13 236); }
+  .cycle-svg .fuel { stroke: oklch(0.65 0.15 30); }
+  .cycle-svg .hot { stroke: oklch(0.7 0.17 50); }
+  .cycle-svg .flow { fill: none; stroke-width: 3; }
+  .nozzle-wrap { background: var(--bg-sunk); border: 1px solid var(--border); border-radius: var(--radius); }
+  canvas#nozzle-canvas { width: 100%; height: 190px; display: block; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="page-hero">
+    <div class="eyebrow">Section 01 · Propulsion</div>
+    <h1>How a rocket engine makes thrust</h1>
+    <p class="lead">A rocket is a machine that throws mass backwards very fast. Everything else (turbopumps, regenerative cooling, full-flow staged combustion) is engineering to throw <em>more</em> mass <em>faster</em> while weighing less. We build it up from Newton’s laws and check each model against real engines.</p>
+    <nav class="toc">
+      <a href="#thrust">Thrust</a><a href="#rocket-equation">The rocket equation</a><a href="#propellants">Propellants</a>
+      <a href="#nozzles">Nozzle theory</a><a href="#nozzle-lab">Nozzle lab</a><a href="#cycles">Engine cycles</a>
+      <a href="#control">Throttle, gimbal, restart</a><a href="#exercises">Exercises</a><a href="#sources">Sources</a>
+    </nav>
+  </section>
+
+  <h2 id="thrust">1. Where thrust comes from</h2>
+  <p>Draw a control volume around the engine. Propellant enters with (almost) no momentum and leaves through the nozzle exit of area \(A_e\) at speed \(v_e\) and pressure \(p_e\), while the outside air pushes back with ambient pressure \(p_a\). Newton’s second law for the gas, plus the pressure imbalance across the exit plane, gives the <strong>thrust equation</strong>:</p>
+  $$ F = \dot m\, v_e + (p_e - p_a)\,A_e $$
+  <p>The first term is <em>momentum thrust</em>; the second is <em>pressure thrust</em>. Because \(p_a\) falls as the rocket climbs, the same engine makes more thrust in vacuum. It’s convenient to fold both terms into one <em>effective exhaust velocity</em> \(c = F/\dot m\), and to quote it divided by standard gravity as the <strong>specific impulse</strong>:</p>
+  $$ I_{sp} = \frac{F}{\dot m\, g_0} = \frac{c}{g_0} \qquad [\text{seconds}] $$
+  <p>Isp in seconds is “how many seconds one kilogram of propellant can produce one kilogram-force of thrust”. It’s the single most important number for an engine’s efficiency.</p>
+  <table class="symbols"><tbody>
+    <tr><td>\(F\)</td><td>thrust (N)</td><td>\(\dot m\)</td><td>propellant mass flow (kg/s)</td></tr>
+    <tr><td>\(v_e\)</td><td>exhaust speed at the exit plane (m/s)</td><td>\(p_e, p_a\)</td><td>exit and ambient pressure (Pa)</td></tr>
+    <tr><td>\(A_e\)</td><td>nozzle exit area (m²)</td><td>\(g_0\)</td><td>9.80665 m/s², a unit convention, not local gravity</td></tr>
+  </tbody></table>
+
+  <h2 id="rocket-equation">2. The rocket equation, and why it’s a tyrant</h2>
+  <p>Integrate momentum conservation as the rocket sheds propellant (derivation in exercise 9) and you get Tsiolkovsky’s equation:</p>
+  $$ \Delta v = I_{sp}\, g_0 \ln\frac{m_0}{m_f} $$
+  <p>Δv grows only with the <em>logarithm</em> of the mass ratio. Reaching low Earth orbit needs about 9.4 km/s once gravity and drag losses are included (see <a href="flight.html">Flight Physics</a>). With kerolox (Isp ≈ 300 s) a single stage would need \(m_0/m_f = e^{9400/2942} ≈ 24\): 96 % of the liftoff mass would be propellant, leaving 4 % for tanks, engines and payload. That is why every orbital rocket <strong>stages</strong>, and why reusing those expensive structures (rather than making them lighter) was SpaceX’s big bet.</p>
+  <div class="lab" id="lab-rocket">
+    <div class="controls">
+      <p class="lab-title">Rocket-equation explorer</p>
+      <div class="field"><label for="re-isp">Specific impulse <output for="re-isp"></output></label><input type="range" id="re-isp" min="200" max="460" step="1" value="348"></div>
+      <div class="field"><label for="re-mr">Mass ratio m₀/m_f <output for="re-mr"></output></label><input type="range" id="re-mr" min="1.1" max="25" step="0.1" value="4.5"></div>
+      <div class="stats">
+        <div class="stat"><span class="v" id="re-dv">—</span><span class="k">Δv (m/s)</span></div>
+        <div class="stat"><span class="v" id="re-pf">—</span><span class="k">propellant fraction</span></div>
+      </div>
+      <p class="small muted">The curves show Δv for typical vacuum Isp of each propellant. The dot is your engine.</p>
+    </div>
+    <div class="output"><canvas class="plot" id="re-plot" aria-label="Delta-v versus mass ratio"></canvas></div>
+  </div>
+
+  <h2 id="propellants">3. Propellants and combustion</h2>
+  <p>Combustion converts chemical energy into hot, light gas. In the chamber the gas is nearly at rest at temperature \(T_c\) and pressure \(p_c\). How fast the nozzle can then make it go depends on \(T_c / \mathcal{M}\), temperature over molar mass: hot and light is fast. That’s why hydrogen (light products) has the best Isp, even though kerosene burns slightly hotter.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Propellant</th><th class="num">O/F</th><th class="num">T<sub>c</sub> (K)</th><th class="num">Bulk density (kg/m³)</th><th class="num">Typical vac Isp</th><th>Used on</th><th>Why</th></tr></thead>
+    <tbody id="prop-table"></tbody>
+  </table></div>
+  <div class="callout note"><strong>Why SpaceX moved from kerosene to methane.</strong> Kerosene leaves soot (<em>coking</em>) in pumps and cooling channels: bad for an engine that should fly 50+ times. Methane burns clean, can be made on Mars from CO₂ and water (Sabatier reaction \(\mathrm{CO_2 + 4H_2 \to CH_4 + 2H_2O}\)), has higher Isp, and stays liquid at nearly the same temperature as LOX (≈ 91–112 K), which simplifies common-bulkhead tanks and lets both propellants autogenously pressurize their tanks. The cost is volume: methalox is ~20 % less dense, so Starship’s tanks are huge.</div>
+  <details class="derive"><summary>Characteristic velocity c*: the combustion figure of merit</summary>
+    <p>For choked flow through a throat of area \(A_t\), mass flow is set by chamber conditions alone: \(\dot m = p_c A_t / c^*\), where</p>
+    $$ c^* = \frac{\sqrt{\gamma R T_c}}{\gamma \sqrt{\left(\frac{2}{\gamma+1}\right)^{\frac{\gamma+1}{\gamma-1}}}}, \qquad R = \frac{R_u}{\mathcal{M}} $$
+    <p>\(c^*\) depends only on the chemistry (\(T_c, \mathcal M, \gamma\)), not on the nozzle. Test stands measure \(p_c\), \(A_t\) and \(\dot m\) to get an experimental \(c^*\); the ratio to theory (\(\eta_{c^*}\), typically 0.97–0.99) says how complete combustion is.</p>
+  </details>
+
+  <h2 id="nozzles">4. Nozzle theory: turning heat into speed</h2>
+  <p>The de Laval nozzle converges to a throat and then diverges. For steady, adiabatic, frictionless (isentropic) flow of a perfect gas, conservation of mass and energy give the <strong>area–Mach relation</strong>:</p>
+  $$ \frac{A}{A^*} = \frac{1}{M}\left[\frac{2}{\gamma+1}\left(1+\frac{\gamma-1}{2}M^2\right)\right]^{\frac{\gamma+1}{2(\gamma-1)}} $$
+  <p>Subsonic flow speeds up in a converging duct; supersonic flow speeds up in a <em>diverging</em> one. The flow reaches exactly Mach 1 at the throat (\(A^*\)). Downstream, every area ratio \(\varepsilon = A_e/A_t\) fixes an exit Mach number, and with it the exit pressure:</p>
+  $$ \frac{p_e}{p_c} = \left(1+\frac{\gamma-1}{2}M_e^2\right)^{-\frac{\gamma}{\gamma-1}} $$
+  <p>Energy conservation then gives the exhaust speed, and the thrust coefficient \(C_F = F/(p_c A_t)\) packages the nozzle’s contribution:</p>
+  $$ v_e = \sqrt{\frac{2\gamma}{\gamma-1}\,R T_c\left[1-\left(\frac{p_e}{p_c}\right)^{\frac{\gamma-1}{\gamma}}\right]}, \qquad C_F = \sqrt{\frac{2\gamma^2}{\gamma-1}\left(\frac{2}{\gamma+1}\right)^{\frac{\gamma+1}{\gamma-1}}\left[1-\left(\frac{p_e}{p_c}\right)^{\frac{\gamma-1}{\gamma}}\right]} + \frac{p_e - p_a}{p_c}\,\varepsilon $$
+  <p>So \(I_{sp} = c^* C_F / g_0\): <strong>chemistry × nozzle</strong>. A bigger area ratio expands the gas further (more \(v_e\)) but at sea level an over-expanded nozzle (\(p_e \ll p_a\)) loses pressure thrust and eventually the flow separates from the wall, which is violent. So sea-level engines use \(\varepsilon\) ≈ 16–35 and vacuum engines 90–165+.</p>
+  <div class="callout warn"><strong>What the ideal model leaves out.</strong> Real exhaust is a reacting mixture whose γ and molar mass change as it expands (shifting equilibrium), the boundary layer adds friction and heat loss, and bell nozzles aren’t perfectly axial (divergence loss). We fold these into an overall efficiency of 0.97 and an <em>effective</em> γ and molar mass fitted to <strong>one</strong> engine per propellant (Merlin 1D, Raptor 2). Every other engine is then a genuine prediction. See <a href="validation.html">Validation</a>: MVac comes out within 1.4 %, Raptor 3 within 1 %, RVac within 4 %.</div>
+
+  <h2 id="nozzle-lab">Nozzle lab</h2>
+  <div class="lab" id="lab-nozzle">
+    <div class="controls">
+      <p class="lab-title">Design a nozzle</p>
+      <div class="field"><span class="lbl">Start from engine</span><select id="nz-engine"></select></div>
+      <div class="field"><label for="nz-pc">Chamber pressure <output for="nz-pc"></output></label><input type="range" id="nz-pc" min="2" max="40" step="0.1" value="9.7"></div>
+      <div class="field"><label for="nz-eps">Area ratio ε <output for="nz-eps"></output></label><input type="range" id="nz-eps" min="2" max="250" step="1" value="16"></div>
+      <div class="field"><label for="nz-alt">Altitude <output for="nz-alt"></output></label><input type="range" id="nz-alt" min="0" max="80" step="0.5" value="0"></div>
+      <div class="stats">
+        <div class="stat"><span class="v" id="nz-isp">—</span><span class="k">Isp (s)</span></div>
+        <div class="stat"><span class="v" id="nz-thrust">—</span><span class="k">thrust (kN)</span></div>
+        <div class="stat"><span class="v" id="nz-me">—</span><span class="k">exit Mach</span></div>
+        <div class="stat"><span class="v" id="nz-pe">—</span><span class="k">exit pressure (kPa)</span></div>
+      </div>
+      <div id="nz-status"></div>
+    </div>
+    <div class="output">
+      <div class="nozzle-wrap"><canvas id="nozzle-canvas" aria-label="Nozzle contour coloured by Mach number"></canvas></div>
+      <canvas class="plot" id="nz-plot" aria-label="Isp versus altitude"></canvas>
+    </div>
+  </div>
+
+  <h2 id="cycles">5. Engine cycles: who drives the pumps?</h2>
+  <p>To push hundreds of kilograms per second into a chamber at 100–350 bar you need pumps, and pumps need power. Pump power is flow × pressure rise:</p>
+  $$ P_{pump} = \frac{\dot m\, \Delta p}{\rho\, \eta_{pump}} $$
+  <p>For a Raptor that’s tens of megawatts (exercise 6). The <em>cycle</em> is where that power comes from:</p>
+  <div class="grid cols-2">
+    <div class="card"><h3>Gas generator: Merlin</h3><p>A small side-burner runs fuel-rich to keep the turbine cool, spins the turbine, and its exhaust is <strong>dumped overboard</strong> (the dark plume beside a Falcon 9’s engines). It’s simple and robust, but the dumped gas contributes almost no thrust: ~2–4 % of the flow wasted, a few % of Isp.</p></div>
+    <div class="card"><h3>Full-flow staged combustion: Raptor</h3><p><strong>All</strong> the fuel runs through a fuel-rich preburner and <strong>all</strong> the oxygen through an oxygen-rich one; each drives its own turbopump, then both hot gas streams meet in the main chamber. Nothing is dumped, turbines run cooler for the same power, and chamber pressure can be enormous (≈ 300–350 bar). The cost is complexity, and oxygen-rich hot gas, which needed new alloys (SpaceX “SX500”).</p></div>
+  </div>
+  <svg class="cycle-svg" viewBox="0 0 760 250" role="img" aria-label="Gas generator versus full-flow staged combustion flow diagrams" style="width:100%;height:auto;margin-top:12px">
+    <text x="20" y="20" font-weight="700">Gas generator</text>
+    <rect class="box" x="20" y="40" width="80" height="34" rx="6"/><text x="30" y="62">LOX tank</text>
+    <rect class="box" x="20" y="150" width="80" height="34" rx="6"/><text x="30" y="172">RP-1 tank</text>
+    <rect class="box" x="140" y="95" width="80" height="34" rx="6"/><text x="150" y="117">Turbopump</text>
+    <rect class="box" x="140" y="190" width="80" height="34" rx="6"/><text x="147" y="212">Gas gen.</text>
+    <rect class="box" x="270" y="95" width="80" height="34" rx="6"/><text x="282" y="117">Chamber</text>
+    <path class="flow ox" d="M100 57 H120 V105 H140"/><path class="flow fuel" d="M100 167 H120 V120 H140"/>
+    <path class="flow ox" d="M220 105 H270"/><path class="flow fuel" d="M220 120 H245 V122 H270"/>
+    <path class="flow hot" d="M180 190 V129"/><path class="flow hot" d="M220 207 H330" stroke-dasharray="6 4"/>
+    <text x="236" y="236" class="muted-t">exhaust dumped overboard</text>
+    <path class="flow hot" d="M310 129 V170"/><text x="285" y="186" class="muted-t">nozzle</text>
+
+    <text x="410" y="20" font-weight="700">Full-flow staged combustion</text>
+    <rect class="box" x="410" y="40" width="80" height="34" rx="6"/><text x="420" y="62">LOX tank</text>
+    <rect class="box" x="410" y="160" width="80" height="34" rx="6"/><text x="417" y="182">CH₄ tank</text>
+    <rect class="box" x="520" y="40" width="96" height="34" rx="6"/><text x="527" y="62">Ox preburner</text>
+    <rect class="box" x="520" y="160" width="96" height="34" rx="6"/><text x="524" y="182">Fuel preburner</text>
+    <rect class="box" x="650" y="100" width="90" height="34" rx="6"/><text x="667" y="122">Chamber</text>
+    <path class="flow ox" d="M490 57 H520"/><path class="flow fuel" d="M490 177 H520"/>
+    <path class="flow ox" d="M505 57 V160 H520" stroke-dasharray="4 4"/><path class="flow fuel" d="M505 177 V74 H520" stroke-dasharray="4 4"/>
+    <path class="flow hot" d="M616 57 H632 V108 H650"/><path class="flow hot" d="M616 177 H632 V126 H650"/>
+    <text x="520" y="100" class="muted-t">small cross-feed lights each preburner</text>
+    <text x="520" y="232" class="muted-t">all propellant ends up in the chamber: nothing dumped</text>
+    <g font-size="11"><line x1="20" y1="244" x2="40" y2="244" class="flow ox"/><text x="44" y="248" class="muted-t">oxidizer</text>
+    <line x1="100" y1="244" x2="120" y2="244" class="flow fuel"/><text x="124" y="248" class="muted-t">fuel</text></g>
+  </svg>
+
+  <div class="lab" id="lab-cycle">
+    <div class="controls">
+      <p class="lab-title">Turbopump power balance</p>
+      <div class="field"><label for="cy-mdot">Engine mass flow <output for="cy-mdot"></output></label><input type="range" id="cy-mdot" min="50" max="900" step="10" value="650"></div>
+      <div class="field"><label for="cy-pc">Chamber pressure <output for="cy-pc"></output></label><input type="range" id="cy-pc" min="20" max="400" step="5" value="300"></div>
+      <div class="field"><span class="lbl">Propellant</span><select id="cy-prop"><option value="methalox">CH₄ / LOX</option><option value="kerolox">RP-1 / LOX</option><option value="hydrolox">LH₂ / LOX</option></select></div>
+      <div class="field"><label for="cy-eta">Pump efficiency <output for="cy-eta"></output></label><input type="range" id="cy-eta" min="0.5" max="0.9" step="0.01" value="0.75"></div>
+    </div>
+    <div class="output">
+      <div class="stats">
+        <div class="stat"><span class="v" id="cy-pox">—</span><span class="k">oxygen pump (MW)</span></div>
+        <div class="stat"><span class="v" id="cy-pf">—</span><span class="k">fuel pump (MW)</span></div>
+        <div class="stat"><span class="v" id="cy-ptot">—</span><span class="k">total (MW)</span></div>
+        <div class="stat"><span class="v" id="cy-gg">—</span><span class="k">GG flow dumped (est.)</span></div>
+      </div>
+      <p class="small muted" id="cy-note"></p>
+      <p class="small muted">Assumes pump discharge ≈ 1.5 × chamber pressure (the rest is lost in injectors, cooling jackets and preburners). The gas-generator estimate sizes a turbine with a pressure ratio of ~20 and inlet gas at ~1,000 K (est.) so the turbine survives.</p>
+    </div>
+  </div>
+
+  <h2 id="control">6. Throttling, gimballing, restarting</h2>
+  <div class="grid cols-3">
+    <div class="card"><h3>Throttle</h3><p>Reducing propellant flow lowers \(p_c\) and thrust. Merlin throttles to roughly 40 % (est.) and Raptor similarly. Throttling matters for max-Q, for limiting acceleration, and above all for <strong>landing</strong>: a nearly empty booster is so light that even one engine at minimum throttle exceeds its weight, so it can’t hover and must time a “hoverslam” perfectly (see <a href="software.html">Flight Software</a>).</p></div>
+    <div class="card"><h3>Gimbal</h3><p>Engines pivot a few degrees on hydraulic or electric actuators to steer (thrust-vector control). A rocket in powered flight is an inverted pendulum, unstable without active control. Starship also has cold-gas/hot-gas reaction control thrusters and flaps.</p></div>
+    <div class="card"><h3>Ignite and re-ignite</h3><p>Merlin lights with a squirt of TEA–TEB (triethylaluminium–triethylborane), which ignites on contact with air or LOX, so the number of restarts is limited by the TEA–TEB cartridge. Raptor uses spark (torch) ignition: in principle unlimited restarts, which matters for boostback, landing and refilling flights.</p></div>
+  </div>
+
+  <h2 id="exercises">Exercises</h2>
+  <div id="exercise-list"></div>
+
+  <h2 id="sources">Sources</h2>
+  <ol class="source-list" id="source-list"></ol>
+</main>
+</body>
+</html>

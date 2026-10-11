@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cost · Moonshot</title>
+<meta name="description" content="Launch economics: what a Falcon 9 costs to fly, why reuse works, propellant is cheap, learning curves, and what a fully reusable Starship could do to $/kg.">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="css/style.css">
+<script type="module" src="js/common.js"></script>
+<script type="module" src="js/pages/cost.js"></script>
+<style>
+  .cost-bar { display: flex; height: 34px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); margin: 8px 0; }
+  .cost-bar > div { display: grid; place-items: center; font-size: .72rem; color: #fff; white-space: nowrap; overflow: hidden; text-shadow: 0 1px 1px rgb(0 0 0 / .35); }
+  .legend-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 14px; font-size: .86rem; }
+  .big-number { font-family: var(--font-display); font-size: 2.4rem; font-weight: 700; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="page-hero">
+    <div class="eyebrow">Section 06 · Cost</div>
+    <h1>What it costs to fly</h1>
+    <p class="lead">Rockets were expensive because we threw them away. A Falcon 9’s propellant costs about as much as a nice house; the hardware costs as much as an airliner. SpaceX’s whole strategy follows from that one fact. Every dollar figure below is an <strong>estimate</strong> (SpaceX publishes prices, not costs), and every slider is yours to disagree with.</p>
+    <nav class="toc"><a href="#history">$/kg through history</a><a href="#f9">Falcon 9 cost model</a><a href="#propellant">Propellant</a><a href="#reuse-curve">Reuse curve</a><a href="#starship">Starship</a><a href="#learning">Learning curves</a><a href="#exercises">Exercises</a><a href="#sources">Sources</a></nav>
+  </section>
+
+  <h2 id="history">1. Price per kilogram, through history</h2>
+  <p>Harry Jones (NASA Ames, 2018) normalized launch costs to FY2018 dollars per kilogram to LEO. The Space Shuttle, partially reusable but needing an army to refurbish it, came in at ~$54,500/kg. Falcon 9 dropped that ~20×, and Falcon Heavy ~40×.</p>
+  <canvas class="plot" id="hist-plot" aria-label="Launch cost per kilogram by first flight year"></canvas>
+
+  <h2 id="f9">2. A Falcon 9 cost model</h2>
+  <p>Split a launch into what you build, what you burn, and what you do. With a reusable booster the booster’s cost is <strong>amortized</strong> over its flights:</p>
+  $$ C_{flight} = \frac{C_{booster}}{N} + C_{refurb} + C_{recovery} + C_{2nd\,stage} + \frac{C_{fairing}}{N_f} + C_{prop} + C_{ops} $$
+  <div class="lab" id="lab-f9">
+    <div class="controls">
+      <p class="lab-title">Your Falcon 9 assumptions</p>
+      <div class="field"><label for="c-n">Flights per booster <output for="c-n"></output></label><input type="range" id="c-n" min="1" max="40" step="1" value="20"></div>
+      <div class="field"><label for="c-b">New booster build cost <output for="c-b"></output></label><input type="range" id="c-b" min="10" max="60" step="1" value="30"></div>
+      <div class="field"><label for="c-s2">Second stage cost <output for="c-s2"></output></label><input type="range" id="c-s2" min="3" max="20" step="0.5" value="10"></div>
+      <div class="field"><label for="c-rf">Refurb per reflight <output for="c-rf"></output></label><input type="range" id="c-rf" min="0" max="10" step="0.25" value="1"></div>
+      <div class="field"><label for="c-fu">Flights per fairing <output for="c-fu"></output></label><input type="range" id="c-fu" min="1" max="20" step="1" value="5"></div>
+      <div class="field"><label for="c-ops">Launch ops & overhead <output for="c-ops"></output></label><input type="range" id="c-ops" min="2" max="20" step="0.5" value="8"></div>
+      <button class="btn" id="c-reset">Reset to defaults</button>
+    </div>
+    <div class="output">
+      <div class="row"><div><div class="big-number" id="c-total">—</div><div class="muted small">marginal cost per flight</div></div><span class="spacer"></span>
+        <div><div class="big-number" id="c-perkg">—</div><div class="muted small">per kg (17.4 t reusable, 22.8 t expendable)</div></div></div>
+      <div class="cost-bar" id="c-bar"></div>
+      <div class="legend-list" id="c-legend"></div>
+      <p class="small" id="c-note"></p>
+      <p class="small muted">Price, for comparison: ~$74 M (2026 list, press reports). The gap between cost and price funds development (Starship, Starlink), failures and profit.</p>
+    </div>
+  </div>
+
+  <h2 id="propellant">3. Propellant is (almost) free</h2>
+  <p>Falcon 9 burns ~488 t of propellant: ~343 t of liquid oxygen (made from air, roughly $0.10–0.20/kg in bulk) and ~145 t of RP-1 (refined kerosene, ~$1/kg). That’s about <strong>$200k</strong>, matching Musk’s 2011 estimate and well under 1 % of the vehicle’s cost. A full Starship stack burns ~4,900 t of methalox, about <strong>$0.9 M</strong>. If the hardware lasts, propellant sets the floor: under $10/kg.</p>
+  <div class="grid cols-2" id="prop-cards"></div>
+
+  <h2 id="reuse-curve">4. How many flights does a booster need?</h2>
+  <p>Amortization has diminishing returns: going from 1 to 5 flights cuts the booster’s share by 80 %; going from 20 to 40 saves another $0.75 M. Past ~10 flights, the second stage and operations dominate.</p>
+  <canvas class="plot" id="reuse-plot" aria-label="Cost per flight versus number of reuses"></canvas>
+
+  <h2 id="starship">5. Starship: reusing everything</h2>
+  <p>Starship’s design goal is full and rapid reuse: booster caught by the tower within minutes, ship caught later, no expendable stage at all. Its build costs are unknown publicly. The defaults below are rough guesses, and Musk’s long-term aspiration of a few $M per flight is shown as a reference, not a fact.</p>
+  <div class="lab" id="lab-ss">
+    <div class="controls">
+      <p class="lab-title">Starship assumptions (very uncertain)</p>
+      <div class="field"><label for="s-bb">Booster build <output for="s-bb"></output></label><input type="range" id="s-bb" min="20" max="200" step="5" value="90"></div>
+      <div class="field"><label for="s-sb">Ship build <output for="s-sb"></output></label><input type="range" id="s-sb" min="10" max="150" step="5" value="60"></div>
+      <div class="field"><label for="s-bn">Booster flights <output for="s-bn"></output></label><input type="range" id="s-bn" min="1" max="100" step="1" value="20"></div>
+      <div class="field"><label for="s-sn">Ship flights <output for="s-sn"></output></label><input type="range" id="s-sn" min="1" max="100" step="1" value="10"></div>
+      <div class="field"><label for="s-ops">Ops & overhead <output for="s-ops"></output></label><input type="range" id="s-ops" min="1" max="30" step="0.5" value="10"></div>
+      <div class="field"><label for="s-pay">Payload to LEO <output for="s-pay"></output></label><input type="range" id="s-pay" min="50" max="200" step="5" value="100"></div>
+    </div>
+    <div class="output">
+      <div class="row"><div><div class="big-number" id="s-total">—</div><div class="muted small">per flight</div></div><span class="spacer"></span><div><div class="big-number" id="s-perkg">—</div><div class="muted small">per kg to LEO</div></div></div>
+      <div class="cost-bar" id="s-bar"></div>
+      <div class="legend-list" id="s-legend"></div>
+      <canvas class="plot" id="ss-plot" aria-label="Starship cost per kilogram versus ship reuses"></canvas>
+    </div>
+  </div>
+
+  <h2 id="learning">6. Learning curves and vertical integration</h2>
+  <p>T. P. Wright (1936) observed that every doubling of cumulative aircraft production cut unit labour cost by a roughly constant fraction \(b\):</p>
+  $$ C_n = C_1\, n^{\log_2 b} $$
+  <p>With \(b = 0.85\), the 100th unit costs 34 % of the first. SpaceX builds Merlins by the hundred, second stages by the dozen per year and Starlink satellites by the thousand, and makes ~70–80 % of parts in-house (est.), so the factory itself goes down the curve. Reuse cuts how many boosters it builds, but the factory still learns on everything that’s still expendable.</p>
+  <canvas class="plot" id="lc-plot" aria-label="Learning curve"></canvas>
+
+  <h2 id="exercises">Exercises</h2>
+  <div id="exercise-list"></div>
+
+  <h2 id="sources">Sources</h2>
+  <ol class="source-list" id="source-list"></ol>
+</main>
+</body>
+</html>

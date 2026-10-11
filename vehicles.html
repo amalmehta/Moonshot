@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Vehicles · Moonshot</title>
+<meta name="description" content="Falcon 9 and Starship + Super Heavy modelled to scale in 3D from their published dimensions: engines, tanks sized from propellant mass, cutaway and exploded views.">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/" } }</script>
+<script type="module" src="js/common.js"></script>
+<script type="module" src="js/pages/vehicles.js"></script>
+<style>
+  #vehicles .lab { grid-template-columns: minmax(250px, 300px) 1fr; }
+  @media (max-width: 760px) {
+    #vehicles .lab { grid-template-columns: 1fr; }
+    #vehicles .lab .output { order: -1; }
+    #vehicles .viewport { height: min(62vh, 520px); }
+  }
+  .seg.wrap-seg { flex-wrap: wrap; }
+  .seg.wrap-seg button { flex: 1 1 auto; }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: .82rem; color: var(--fg-muted); }
+  .legend span { white-space: nowrap; }
+  #part-card { padding: 12px 14px; font-size: .88rem; min-height: 120px; }
+  #part-card h4 { margin: 0 0 4px; font-size: 1rem; }
+  #part-card ul { margin: 6px 0 0; padding-left: 18px; }
+  #part-card li { margin: 2px 0; }
+  .v3-label { font: 600 12px var(--font); color: #e9eefb; background: rgb(8 12 22 / .72); border: 1px solid rgb(255 255 255 / .18); padding: 2px 7px; border-radius: 6px; white-space: nowrap; pointer-events: none; }
+  .v3-label.title { font-size: 13px; color: #ffd08a; }
+  .v3-label.dim { font-weight: 500; color: #c6cfe3; }
+  .viewport .overlay.tl { top: 10px; left: 12px; }
+  .viewport .overlay.br { bottom: 10px; right: 12px; left: 12px; text-align: right; opacity: .8; }
+  @media (max-width: 560px) { .viewport .overlay.br { display: none; } .viewport .overlay.tl { right: 12px; } }
+  .viewport .loading { position: absolute; inset: 0; display: grid; place-items: center; color: #9aa5bf; font: 14px var(--font); }
+  .spec-table td.est::after, .spec-table span.est::after { content: ' est.'; font-size: .72em; color: var(--warn); font-weight: 600; }
+  .budget-bar { display: flex; height: 16px; border-radius: 4px; overflow: hidden; border: 1px solid var(--border); background: var(--bg-sunk); }
+  .budget-bar > span { display: block; height: 100%; }
+  .stack-figure { width: 100%; max-width: 520px; display: block; margin: 8px auto; }
+  .stack-figure text { fill: var(--fg); font: 12px var(--font); }
+  .stack-figure .m { fill: var(--fg-muted); font-size: 11px; }
+  .stack-figure .wall { fill: none; stroke: var(--fg-muted); stroke-width: 1.5; }
+</style>
+</head>
+<body>
+<main class="wrap" id="vehicles">
+  <section class="page-hero">
+    <div class="eyebrow">Hardware in 3D</div>
+    <h1>The vehicles, to scale</h1>
+    <p class="lead">Falcon 9 and Starship + Super Heavy, built procedurally from their published lengths, diameters and engine counts. The nozzles are sized by the same ideal-nozzle model as the <a href="propulsion.html">Propulsion</a> page, and the tanks inside are sized from each stage’s propellant mass. Slice them open, pull them apart and click any part.</p>
+    <nav class="toc">
+      <a href="#viewer">3D viewer</a><a href="#falcon9">Falcon 9 architecture</a><a href="#starship">Starship architecture</a>
+      <a href="#engines">Engines up close</a><a href="#specs">Specs</a><a href="#tanks">Tank geometry</a><a href="#exercises">Exercises</a><a href="#sources">Sources</a>
+    </nav>
+  </section>
+
+  <h2 id="viewer">3D viewer</h2>
+  <div class="lab">
+    <div class="controls">
+      <div class="field"><span class="lbl">Show</span>
+        <div class="seg wrap-seg" role="group" aria-label="Vehicle" id="pick">
+          <button data-mode="falcon9" aria-pressed="true">Falcon 9</button>
+          <button data-mode="starship" aria-pressed="false">Starship</button>
+          <button data-mode="both" aria-pressed="false">Side by side</button>
+          <button data-mode="engines" aria-pressed="false">Engines</button>
+        </div>
+      </div>
+      <label class="checkbox"><input type="checkbox" id="opt-cut"> Cutaway: show the propellant tanks</label>
+      <label class="checkbox"><input type="checkbox" id="opt-explode"> Exploded view (stage and fairing separation)</label>
+      <label class="checkbox"><input type="checkbox" id="opt-legs"> Landing configuration (legs and grid fins out)</label>
+      <div class="field"><span class="lbl">Paint</span>
+        <div class="seg" role="group" aria-label="Colour scheme" id="paint">
+          <button data-paint="category" aria-pressed="true">By system</button>
+          <button data-paint="real" aria-pressed="false">As flown</button>
+        </div>
+      </div>
+      <div class="legend" id="legend" aria-label="Colour legend"></div>
+      <div class="row"><button class="btn" id="reset-view">Reset view</button><span class="small muted" id="motion-note"></span></div>
+      <div class="card" id="part-card" aria-live="polite"><p class="muted" style="margin:0">Click or tap any part to see what it is, what it’s made of and its numbers. Values marked <span class="badge warn">est.</span> are public estimates.</p></div>
+    </div>
+    <div class="output">
+      <div class="viewport" id="viewport">
+        <div class="loading" id="loading">Loading 3D…</div>
+        <div class="overlay tl" id="ov-title"></div>
+        <div class="overlay br">drag to orbit · scroll or pinch to zoom · right-drag to pan</div>
+      </div>
+    </div>
+  </div>
+  <p class="small muted">Everything is in metres at true scale. Shell lengths and diameters are published figures; tank lengths, nozzle sizes and the engine-bay/interstage allowances are this site’s model (see <a href="#tanks">tank geometry</a>). Where a cluster is too tight for the computed bell (Super Heavy’s outer ring of 20, Falcon 9’s octaweb) the bell is drawn at the largest size that fits; the info card says by how much.</p>
+
+  <h2 id="falcon9">Falcon 9, stage by stage</h2>
+  <div class="grid cols-2">
+    <div>
+      <h3>First stage: nine engines and a set of landing gear</h3>
+      <p><strong>Nine Merlin 1D engines</strong> sit in the <em>octaweb</em>: eight in a ring around one in the centre. Nine small engines rather than one big one is a deliberate trade: one engine design is mass-produced (cheaper per unit, more flight data per year), the vehicle can lose an engine and still reach orbit, and for landing you can light just the centre engine, which matters because even one Merlin at minimum throttle out-pushes a nearly empty booster, so it lands in a single “hoverslam” burn timed to reach zero speed at zero height.</p>
+      <p><strong>Kerosene (RP-1) and liquid oxygen</strong>: kerolox is dense (bulk density ≈ 1 070 kg/m³ when sub-cooled, see below), so tanks are short and light, and it is well understood. The cost is soot (coking) in the engines, which complicates reuse, and a lower Isp than methane.</p>
+      <p><strong>Tanks are the airframe.</strong> The aluminium–lithium tank walls carry all the loads; there’s no separate outer skin. LOX sits above RP-1 and feeds the engines through a tube running down through the fuel tank. The 3.7 m diameter is set by what fits on US highways.</p>
+      <p><strong>Recovery hardware</strong>: four titanium <strong>grid fins</strong> on the interstage steer the booster through re-entry, nitrogen <strong>cold-gas thrusters</strong> flip it for the boostback burn above the atmosphere, and four carbon-fibre <strong>landing legs</strong> deploy just before touchdown. Together they cost a few tonnes of payload; that is the price of reuse (17.4 t reusable vs 22.8 t expendable to LEO).</p>
+    </div>
+    <div>
+      <h3>Interstage, second stage and fairing</h3>
+      <p>The black <strong>interstage</strong> is a carbon-composite sleeve that stays with the booster and hides the second-stage engine.</p>
+      <p>The <strong>second stage</strong> is a shorter version of the first-stage tank on the same tooling, with one <strong>Merlin Vacuum</strong>. Its huge, thin, radiatively cooled niobium nozzle extension (area ratio ≈ 165) expands the exhaust much further than a sea-level engine can without flow separation, raising Isp from 311 s to about 348 s. It is expended on every flight.</p>
+      <p>The <strong>payload fairing</strong> is two composite clamshell halves, 5.2 m wide and 13.1 m tall. It splits once the air is thin enough (pneumatic pushers, no explosives), and the halves glide back under parachutes to be reused.</p>
+      <p><strong>Densified propellants.</strong> The Full Thrust upgrade sub-cools LOX to about −207 °C and chills RP-1, making both denser so more propellant fits in the same tanks. The tank model below uses those densities (estimates) by default; untick “densified” to see how much longer the tanks would need to be.</p>
+    </div>
+  </div>
+
+  <h2 id="starship">Starship + Super Heavy, stage by stage</h2>
+  <div class="grid cols-2">
+    <div>
+      <h3>Super Heavy: 33 Raptors and no landing legs</h3>
+      <p><strong>33 Raptor engines in three rings: 3 + 10 + 20.</strong> The inner 3 and the middle 10 gimbal (steer) and can relight for the boostback and landing burns. The outer 20 are fixed and run only during ascent, so they skip the gimbal actuators and relight hardware; the ring that contributes most thrust is also the cheapest per engine.</p>
+      <p><strong>Methane and oxygen</strong> (methalox) in a <strong>full-flow staged-combustion</strong> cycle: both propellants pass entirely through turbines (one oxygen-rich, one fuel-rich preburner) before burning, so nothing is thrown away and the turbines run cooler at very high chamber pressure. Methane burns cleanly (no coking, kinder to reuse), gives higher Isp than kerosene, is liquid at temperatures close to LOX’s (a common bulkhead between them is easy), and could be made on Mars from CO₂ and water.</p>
+      <p><strong>Stainless steel</strong> instead of aluminium or carbon fibre: it’s cheap, easy to weld in a tent, gets <em>stronger</em> at cryogenic temperatures and keeps its strength hundreds of degrees hotter than aluminium, so the booster needs no thermal protection on its body. The 9 m diameter is possible because the vehicle is built next to the launch site, not shipped by road.</p>
+      <p><strong>Hot staging</strong>: the ship lights its engines while still attached, with exhaust escaping through the vented <strong>hot-staging ring</strong>. No coast, no settling burn, more payload. The booster returns with four <strong>grid fins</strong> and is <strong>caught by the launch tower’s “chopsticks”</strong> under hardpoints, so it carries no legs at all.</p>
+    </div>
+    <div>
+      <h3>Starship: an upper stage that comes home</h3>
+      <p><strong>Six engines</strong>: three sea-level Raptors in the centre (they gimbal, and land the ship) and three <strong>Raptor Vacuum</strong> engines with much larger bells (area ratio ≈ 90) for efficiency in space. A vacuum bell would separate at sea level, which is why the landing burn uses only the small ones.</p>
+      <p><strong>Belly-first re-entry.</strong> The ship falls broadside, like a skydiver, presenting its windward side to the plasma. Only that side is covered in <strong>hexagonal ceramic tiles</strong>: identical hexagons can be mass-produced, and their staggered gaps never line up into a straight channel for hot gas to flow along. The leeward steel stays bare.</p>
+      <p><strong>Four flaps</strong> (two forward, two aft) steer the belly-flop the way a skydiver uses arms and legs: changing their angles moves the centre of pressure for pitch, roll and yaw. Just before landing it flips to vertical with a burst of engine thrust, using propellant from small <strong>header tanks</strong> that don’t slosh.</p>
+      <p>The <strong>nose</strong> holds the payload bay. Inside the main tanks, the cutaway shows LOX at the bottom of the ship and methane above (est.), opposite to the booster.</p>
+    </div>
+  </div>
+
+  <h2 id="engines">Engines up close</h2>
+  <p>Pick <em>Engines</em> in the viewer to see a Merlin 1D and a Raptor 2 side by side at true relative size, each with a quarter cut away to show the flow path: <strong>chamber → throat → bell</strong>. Both are drawn from the same contour recipe, sized by the nozzle model so it reproduces each engine’s published thrust at its estimated chamber pressure:</p>
+  <ol>
+    <li><strong>Throat area</strong> \(A_t = F / (p_c\,C_F\,\eta)\) from the engine model (\(\eta = 0.97\)); the throat is where the gas reaches Mach 1, and it sets the mass flow \(\dot m = p_c A_t / c^*\).</li>
+    <li><strong>Exit area</strong> \(A_e = \varepsilon A_t\), with the published (est.) area ratio ε.</li>
+    <li><strong>Contour</strong>: a cylindrical chamber (contraction ratio 3, characteristic length \(L^* = 1\) m), a converging cone, a throat with rounding radii \(1.5\,r_t\) upstream and \(0.382\,r_t\) downstream, then a Rao “80 % bell” approximated by a parabola from angle \(\theta_n\) to \(\theta_e\).</li>
+  </ol>
+  <p id="engine-dims" class="small"></p>
+  <p class="small muted">Raptor’s far higher chamber pressure (≈ 30 MPa vs ≈ 9.7 MPa) means a throat barely bigger than Merlin’s produces 2.7× the thrust. The turbopumps are schematic: one turbopump plus a dumped gas-generator exhaust pipe on Merlin, two turbopumps (oxygen-rich and fuel-rich) on Raptor.</p>
+
+  <h2 id="specs">Specifications</h2>
+  <p>Straight from this site’s data file. Cells marked <span style="color:var(--warn);font-weight:600">est.</span> are public estimates rather than SpaceX figures; propellant fraction and fineness ratio are computed here.</p>
+  <div class="table-wrap"><table class="spec-table" id="stage-table"></table></div>
+  <h3>Engines</h3>
+  <div class="table-wrap"><table class="spec-table" id="engine-table"></table></div>
+
+  <h2 id="tanks">Tank geometry: how long must the tanks be?</h2>
+  <p>The cutaway isn’t drawn by eye. Each stage’s tanks are sized from its propellant mass, its mixture ratio and its diameter, then checked against the published stage length.</p>
+  <h3>1. Split the propellant by mixture ratio</h3>
+  <p>An engine burns oxidiser and fuel at a fixed mass ratio \(r = \dot m_{ox}/\dot m_f\) (≈ 2.36 for kerolox, ≈ 3.6 for methalox). A stage carrying \(m_p\) of propellant therefore holds</p>
+  $$ m_{ox} = m_p\,\frac{r}{1+r}, \qquad m_f = m_p\,\frac{1}{1+r}, \qquad V_{ox} = \frac{m_{ox}}{\rho_{ox}},\quad V_f = \frac{m_f}{\rho_f}. $$
+  <p>The ratio of total mass to total volume is the <strong>bulk density</strong> \(\rho_b = (1+r)\big/\big(r/\rho_{ox} + 1/\rho_f\big)\). Densified kerolox ≈ 1 070 kg/m³, densified methalox ≈ 870 kg/m³ (≈ 1 020 and ≈ 830 at boiling-point densities): methane needs about 23 % more tank volume per kilogram, which is one reason Starship is so wide.</p>
+  <h3>2. Leave ullage</h3>
+  <p>Tanks are never filled to the brim. The <strong>ullage</strong> fraction \(u\) (a few percent) is gas space for boil-off, thermal expansion and pressurant. Tank volume is \(V_{tank} = V_{liquid}/(1-u)\).</p>
+  <h3>3. Cylinder plus domes</h3>
+  <p>A tank stack of inner radius \(R\) is a cylindrical barrel of length \(L_b\) closed by two domes. Model each dome as half an ellipsoid of height \(h = kR\):</p>
+  $$ V_{dome} = \tfrac{2}{3}\pi R^2 h = \tfrac{2}{3}\pi k R^3, \qquad V_{stack} = \pi R^2 L_b + 2V_{dome} $$
+  $$ \Rightarrow\quad L_b = \frac{V_{ox,tank} + V_{f,tank} - 2V_{dome}}{\pi R^2}, \qquad L_{stack} = L_b + 2kR. $$
+  <p>The two tanks share a <strong>common bulkhead</strong>: one dome that bulges into the lower tank. It takes volume \(V_{dome}\) from the lower tank and gives the same volume to the upper one, so it adds no length; the bulkhead’s rim sits a barrel length \(L_1 = V_{lower,tank}/\pi R^2\) above the bottom dome. Separate tanks would need two extra domes and an intertank, several metres longer.</p>
+  <details class="derive"><summary>Why \(k = 1/\sqrt2\)? Dome shape from membrane stresses</summary>
+    <p>In a thin pressurised shell of revolution the meridional and hoop stresses satisfy \(\sigma_\phi/R_1 + \sigma_\theta/R_2 = p/t\). For an ellipsoidal head with equatorial radius \(a = R\) and height \(b = kR\), at the equator this gives</p>
+    $$ \sigma_\phi = \frac{pa}{2t}, \qquad \sigma_\theta = \frac{pa}{t}\left(1 - \frac{a^2}{2b^2}\right). $$
+    <p>The hoop stress turns <em>compressive</em> (a buckling risk for a thin wall) when \(a/b > \sqrt2\). So \(k = 1/\sqrt2 ≈ 0.71\) is the shallowest ellipsoid whose skin is in tension everywhere; flatter domes save length but need local stiffening. A hemisphere (\(k = 1\)) has the lowest stress but wastes length. Real domes are often shallower with reinforcement, which is why \(k\) is a slider below.</p>
+  </details>
+  <table class="symbols"><tbody>
+    <tr><td>\(m_p\)</td><td>stage propellant mass (kg)</td><td>\(r\)</td><td>oxidiser-to-fuel mixture ratio by mass</td></tr>
+    <tr><td>\(\rho_{ox}, \rho_f\)</td><td>liquid densities (kg/m³), higher when sub-cooled</td><td>\(\rho_b\)</td><td>bulk density of the propellant load</td></tr>
+    <tr><td>\(u\)</td><td>ullage fraction of each tank</td><td>\(R\)</td><td>inner tank radius = half the stage diameter minus the wall</td></tr>
+    <tr><td>\(k\)</td><td>dome height / radius</td><td>\(L_b, L_{stack}\)</td><td>barrel length; barrel + two domes</td></tr>
+  </tbody></table>
+  <p><strong>Assumptions the model leaves out:</strong> internal plumbing (the LOX downcomer displaces some fuel volume), header tanks (Starship), pressurant bottles (COPVs inside Falcon’s LOX tank), residual propellant and the exact dome shapes, none of which SpaceX publishes. Engine-bay and interstage lengths are rough estimates.</p>
+
+  <div class="lab" id="tank-lab">
+    <div class="controls">
+      <p class="lab-title">Tank calculator</p>
+      <div class="field"><label for="tk-ullage">Ullage <output for="tk-ullage"></output></label><input type="range" id="tk-ullage" min="0" max="10" step="0.5" value="3"></div>
+      <div class="field"><label for="tk-k">Dome height / radius k <output for="tk-k"></output></label><input type="range" id="tk-k" min="0.3" max="1" step="0.01" value="0.71"></div>
+      <label class="checkbox"><input type="checkbox" id="tk-dense" checked> Densified (sub-cooled) propellants</label>
+      <p class="small muted">Changes here also resize the tanks in the 3D cutaway.</p>
+    </div>
+    <div class="output">
+      <div class="table-wrap"><table id="tank-table"></table></div>
+      <p class="small muted" id="tank-note"></p>
+    </div>
+  </div>
+  <div class="callout note"><strong>What the check shows.</strong> With densified propellants and a √2 dome, the computed tanks plus the computed engine length and estimated engine-bay and interstage allowances land within a few percent of each published stage length. The model is crude, but a tank that came out 30 % too long would mean the propellant masses (which are estimates) were wrong. These are the <a href="validation.html">validation</a> rows for this page. The ship’s remainder is the nose: payload bay, header tanks and nose cone.</div>
+
+  <h2 id="exercises">Exercises</h2>
+  <div id="exercise-list"></div>
+
+  <h2 id="sources">Sources</h2>
+  <ol class="source-list" id="source-list"></ol>
+</main>
+</body>
+</html>

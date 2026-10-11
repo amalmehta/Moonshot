@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moonshot · How a Rocket Works</title>
+<meta name="description" content="How the SpaceX rocket system works from first principles: propulsion, flight physics, hardware, flight software, Starlink, cost, 3D vehicles and a physics-based Moon mission, all checked against published figures.">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="css/style.css">
+<script type="module" src="js/common.js"></script>
+<script type="module" src="js/pages/home.js"></script>
+<style>
+  .hero { isolation: isolate; }
+  .hero .lead { font-size: 1.25rem; }
+  .hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; margin: 26px 0 10px; }
+  .section-cards .card h3 { margin: 6px 0 6px; }
+  .section-cards .card p { color: var(--fg-muted); font-size: .94rem; margin: 0 0 10px; }
+  .num-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 28px 0; }
+  .num-strip .card { padding: 14px 16px; }
+  svg.system-map { width: 100%; height: auto; }
+  svg.system-map text { fill: var(--fg); font: 600 13px var(--font); }
+  svg.system-map .sub { fill: var(--fg-muted); font: 11px var(--font); }
+  svg.system-map .edge { stroke: var(--fg-muted); stroke-width: 1.5; fill: none; marker-end: url(#arrow); opacity: .7; }
+  svg.system-map a:hover rect { stroke-width: 2.5; }
+</style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <canvas class="stars" id="stars" aria-hidden="true"></canvas>
+    <div class="wrap">
+      <div class="eyebrow">Moonshot · an unofficial, first-principles study</div>
+      <h1>How a rocket system works, from the equation up to the Moon.</h1>
+      <p class="lead">Engines, nozzles, steel, guidance software, 33-engine boosters caught by a tower, a constellation of satellites, and the money behind it all. Every piece is derived from physics you can check, simulated live in your browser, and compared with published numbers.</p>
+      <div class="hero-ctas">
+        <a class="btn primary big" href="moon.html">🚀 Send me to the Moon</a>
+        <a class="btn big" href="vehicles.html">Explore the rockets in 3D</a>
+        <a class="btn big" href="propulsion.html">Start from the rocket equation</a>
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap">
+    <div class="num-strip" id="num-strip"></div>
+
+    <h2 id="map">The whole system on one page</h2>
+    <p class="muted">Each box is a section. Arrows show what feeds what: engines set the rocket equation, the rocket equation sets vehicle size, software flies it, reuse sets the cost, and Starlink fills the rockets.</p>
+    <svg class="system-map" viewBox="0 0 960 360" role="img" aria-label="System map of the sections">
+      <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" style="color:var(--fg-muted)"/></marker></defs>
+      <g id="map-nodes"></g>
+    </svg>
+
+    <h2 id="sections">Sections</h2>
+    <div class="grid cols-3 section-cards" id="section-cards"></div>
+
+    <h2 id="how">How this site works</h2>
+    <div class="grid cols-3">
+      <div class="card"><h3>Derive</h3><p class="muted">Every model starts from conservation laws and is written out with symbols explained, plus what it leaves out. No black boxes.</p></div>
+      <div class="card"><h3>Simulate</h3><p class="muted">Ascent, landing, nozzle flow, orbits, constellations and the Earth–Moon trip are numerically integrated in your browser, not pre-recorded animations.</p></div>
+      <div class="card"><h3>Check</h3><p class="muted">Model outputs are compared with SpaceX, NASA, FAA and FCC figures on the <a href="validation.html">Validation</a> page, and run as automated tests.</p></div>
+    </div>
+  </div>
+</main>
+</body>
+</html>

@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starlink · Moonshot</title>
+<meta name="description" content="How a satellite internet constellation works from first principles: Walker shells, J2 precession, coverage geometry, phased arrays, link budgets, laser links and electric propulsion.">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/" } }</script>
+<script type="module" src="js/common.js"></script>
+<script type="module" src="js/pages/starlink.js"></script>
+<style>
+  #starlink .shell-legend { display: flex; flex-direction: column; gap: 4px; font-size: .84rem; }
+  #starlink .shell-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  #starlink .hud { left: 10px; top: 10px; line-height: 1.5; background: rgb(0 0 0 / .35); padding: 6px 9px; border-radius: 8px; }
+  #starlink .hud-br { right: 10px; bottom: 10px; text-align: right; }
+  #starlink .viewport canvas { cursor: crosshair; touch-action: none; }
+  #starlink .polar-wrap { position: relative; }
+  #starlink canvas.polar { width: 100%; height: 300px; display: block; }
+  #starlink .kv { width: 100%; font-size: .9rem; }
+  #starlink .kv td:last-child { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #starlink .est { font-size: .72rem; color: var(--warn); font-weight: 600; margin-left: 4px; }
+  #starlink .lab .seg { flex-wrap: wrap; }
+  #starlink .lab .stats .v { font-size: 1.25rem; }
+  #starlink figure { margin: 16px 0; }
+  #starlink figcaption { font-size: .85rem; color: var(--fg-muted); margin-top: 6px; }
+  @media (max-width: 520px) { #starlink .hud { font-size: .72rem; } #starlink .hud-br { display: none; } }
+</style>
+</head>
+<body>
+<main class="wrap" id="starlink">
+  <section class="page-hero">
+    <div class="eyebrow">Communications</div>
+    <h1>Starlink</h1>
+    <p class="lead">Thousands of small satellites in low orbits act as one network: each one lights up a few patches of ground with steerable radio beams, and lasers pass traffic between them. Here is every piece of it, from the orbit geometry to the antenna physics to the latency budget, worked out from first principles and checked against FCC filings and SpaceX’s published numbers.</p>
+    <nav class="toc">
+      <a href="#constellation">Constellation geometry</a>
+      <a href="#globe">Live globe</a>
+      <a href="#coverage">Coverage math</a>
+      <a href="#phased-array">Phased arrays</a>
+      <a href="#link-budget">Link budget</a>
+      <a href="#lasers">Lasers &amp; latency</a>
+      <a href="#bus">Satellite bus &amp; economics</a>
+      <a href="#exercises">Exercises</a>
+      <a href="#sources">Sources</a>
+    </nav>
+  </section>
+
+  <!-- ===================================================================== -->
+  <h2 id="constellation">1. Constellation geometry: Walker shells</h2>
+  <p>A single satellite 550 km up sees only a circle about 940 km in radius (worked out in <a href="#coverage">§3</a>) and crosses it in a few minutes. To give everyone a satellite overhead at all times you need many satellites, spread out evenly. The standard way to spread them is a <strong>Walker-delta</strong> pattern: put \(T\) satellites in \(P\) equally spaced orbital planes, all at the same altitude and inclination \(i\), with \(S = T/P\) satellites equally spaced in each plane.</p>
+  <p>Walker’s shorthand is \(i{:}\,T/P/F\). The integer \(F\in\{0,\dots,P-1\}\) staggers neighbouring planes so their satellites don’t all cross the equator at the same moment:</p>
+  $$\Omega_j = \frac{2\pi j}{P},\qquad u_{jk}(0) = \frac{2\pi k}{S} + \frac{2\pi F j}{T},\qquad j = 0..P-1,\ k = 0..S-1.$$
+  <p>Here \(\Omega_j\) is the right ascension of the ascending node (RAAN, where plane \(j\) crosses the equator going north) and \(u\) is the argument of latitude (the angle travelled from that node). The FCC’s 2021 authorisation for the first generation lists the shells exactly in these terms:</p>
+  <div class="table-wrap">
+    <table id="shell-table">
+      <thead><tr><th>Shell</th><th>Altitude</th><th>Inclination</th><th>Planes × per plane</th><th>Satellites</th><th>Walker (F est.)</th><th>Period</th><th>RAAN drift</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="small muted">Gen1: FCC 21-48 (April 2021), 4,408 satellites. Gen2: FCC 22-91 (December 2022) authorised up to 7,500 satellites in the 525/530/535 km shells; the 28 planes × 120 layout is from SpaceX’s amended Gen2 application, so the fully populated geometry (10,080) is shown, more than was authorised at first. The phasing factor \(F\) isn’t in the filings; \(F = 1\) is an assumption. Period and drift are computed below.</p>
+
+  <h3>Propagating a circular orbit</h3>
+  <p>For a circular orbit the satellite just moves uniformly in \(u\) at the mean motion \(n = \sqrt{\mu/a^3}\), where \(a = R_\oplus + h\). Rotating the in-plane position by the inclination and then the RAAN gives the Earth-centred inertial position:</p>
+  $$\mathbf r = a\begin{pmatrix}\cos\Omega\cos u - \sin\Omega\sin u\cos i\\ \sin\Omega\cos u + \cos\Omega\sin u\cos i\\ \sin u\sin i\end{pmatrix},\qquad u(t) = u_0 + \dot u\,t,\quad \Omega(t) = \Omega_0 + \dot\Omega\,t.$$
+  <p>To get Earth-fixed coordinates (so cities stay put), subtract Earth’s rotation angle \(\theta = \omega_\oplus t\) from \(\Omega\). That is all the globe below does, 14,488 times per frame: three sines, three cosines and a few multiplies per satellite, written into one typed array.</p>
+
+  <h3>Why the planes drift: J2 nodal precession</h3>
+  <p>Earth is about 21 km fatter at the equator than at the poles. That bulge is the \(J_2\) term of the gravity field, and it is the largest perturbation in low orbit. Averaged over an orbit, the bulge pulls the satellite towards the equatorial plane, which is a torque perpendicular to the orbit’s angular momentum. Like a tilted spinning top, the orbit plane doesn’t flatten; it <em>precesses</em> about Earth’s axis:</p>
+  $$\boxed{\dot\Omega = -\frac32\, n\, J_2\left(\frac{R_\oplus}{a}\right)^2\cos i}\qquad(e = 0).$$
+  <details class="derive">
+    <summary>Derivation of \(\dot\Omega\) from the J2 potential</summary>
+    <p>The J2 part of Earth’s potential is \(\displaystyle R = -\frac{\mu J_2 R_\oplus^2}{2r^3}\left(3\sin^2\phi - 1\right)\), with \(\phi\) the latitude. On an orbit, \(\sin\phi = \sin i\sin u\). Average over one circular orbit (\(r = a\), \(\langle\sin^2 u\rangle = \tfrac12\)):</p>
+    $$\bar R = -\frac{\mu J_2 R_\oplus^2}{2a^3}\left(\tfrac32\sin^2 i - 1\right) = \frac{\mu J_2 R_\oplus^2}{4a^3}\left(2 - 3\sin^2 i\right).$$
+    <p>Lagrange’s planetary equation for the node is \(\displaystyle\dot\Omega = \frac{1}{na^2\sqrt{1-e^2}\,\sin i}\frac{\partial\bar R}{\partial i}\). Since \(\partial\bar R/\partial i = -\dfrac{3\mu J_2R_\oplus^2}{2a^3}\sin i\cos i\) and \(\mu = n^2a^3\):</p>
+    $$\dot\Omega = \frac{1}{na^2\sin i}\left(-\frac{3n^2 J_2R_\oplus^2}{2}\sin i\cos i\right) = -\frac32 nJ_2\left(\frac{R_\oplus}{a}\right)^2\cos i.\ \blacksquare$$
+    <p>The same averaging gives the drift of the argument of latitude, which the globe also uses: \(\dot u = n\left[1 + \tfrac34J_2(R_\oplus/a)^2\left(8\cos^2 i - 2\right)\right]\) for \(e = 0\).</p>
+  </details>
+  <p>At 550 km and 53° the planes regress by about 4.5° per day. Because every plane in a shell has the same \(a\) and \(i\), they all drift at the same rate, so <strong>the Walker pattern survives intact</strong>; it just rotates slowly as a whole. That is the main reason a shell uses one altitude and one inclination. Shells at different altitudes or inclinations drift apart from each other, which is fine because they’re coordinated independently.</p>
+  <table class="symbols">
+    <tbody>
+      <tr><td>\(\mu\)</td><td>Earth’s gravitational parameter, \(3.986\times10^{14}\) m³/s²</td></tr>
+      <tr><td>\(R_\oplus\)</td><td>Earth equatorial radius, 6,378.137 km</td></tr>
+      <tr><td>\(a,\ h\)</td><td>orbit radius and altitude, \(a = R_\oplus + h\)</td></tr>
+      <tr><td>\(n\)</td><td>mean motion \(\sqrt{\mu/a^3}\) (rad/s); period \(T = 2\pi/n\)</td></tr>
+      <tr><td>\(i\)</td><td>inclination of the orbit plane to the equator</td></tr>
+      <tr><td>\(\Omega,\ u\)</td><td>RAAN (where the plane crosses the equator northbound) and argument of latitude (angle from that node)</td></tr>
+      <tr><td>\(T/P/F\)</td><td>total satellites / planes / inter-plane phasing integer</td></tr>
+      <tr><td>\(J_2\)</td><td>Earth’s oblateness coefficient, \(1.0826\times10^{-3}\)</td></tr>
+      <tr><td>\(\omega_\oplus\)</td><td>Earth’s sidereal rotation rate, \(7.292\times10^{-5}\) rad/s</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Why 53°, and why polar shells?</h3>
+  <p>A satellite in an orbit of inclination \(i\) only ever flies over latitudes \(|\phi| \le i\). Worse for the low latitudes: it spends most of its time near the extremes, because that is where its ground track turns around. For a uniformly moving satellite the fraction of time spent at latitude \(\phi\) goes as \(1/\sqrt{\sin^2 i - \sin^2\phi}\), which piles up at \(\phi \to \pm i\). So 53° shells put the densest coverage around 45–55°, right over the United States, Europe and southern Canada, where most paying customers are. The 70° shell and the 97.6° polar shells fill in Alaska, Scandinavia, the poles and the oceans in between. The 97.6° inclination isn’t arbitrary: at 560 km it is <strong>sun-synchronous</strong>. With \(\cos i < 0\), \(\dot\Omega\) is positive and matches the Sun’s apparent motion of 360° per year (0.9856°/day), so the polar planes keep the same lighting all year (exercise 3).</p>
+  <div class="callout note">Where the model departs from reality: real Starlink satellites ride slightly elliptical orbits, manoeuvre for collision avoidance and station-keeping, sit at slightly different altitudes within a shell, and many slots are empty or being filled at any moment. The globe shows the <em>authorised design</em>, not today’s satellites.</div>
+
+  <!-- ===================================================================== -->
+  <h2 id="globe">2. Live globe</h2>
+  <p>Every dot is one satellite of the authorised design, propagated with the equations above (circular orbit + J2 drift) and colour-coded by shell family: the 53° shells, the 70° shell, the polar shells and, if you switch them on, the Gen2 shells all use shades of the same cyan Starlink hue family. Click the globe or pick a city: the satellites above that user’s 25° minimum elevation light up, and a line marks the serving satellite (here simply the closest one; the real scheduler also balances load).</p>
+  <div class="lab" aria-label="Starlink constellation globe">
+    <div class="controls">
+      <div class="lab-title">Constellation</div>
+      <label class="checkbox"><input type="checkbox" id="gen2"> Add the Gen2 shells (525–535 km)</label>
+      <div class="field"><span class="lbl">User location</span>
+        <select id="city" aria-label="User location">
+          <option value="51.5074,-0.1278">London</option>
+          <option value="40.7128,-74.006">New York</option>
+          <option value="47.6062,-122.3321" selected>Seattle</option>
+          <option value="-0.1807,-78.4678">Quito (equator)</option>
+          <option value="-33.8688,151.2093">Sydney</option>
+          <option value="61.2181,-149.9003">Anchorage</option>
+          <option value="69.6492,18.9553">Tromsø (69.6° N)</option>
+          <option value="-77.846,166.676">McMurdo Station (Antarctica)</option>
+          <option value="custom" hidden>Clicked point</option>
+        </select>
+      </div>
+      <div class="field"><label for="elev"><span>Minimum elevation</span> <output for="elev"></output></label>
+        <input type="range" id="elev" min="10" max="60" step="1" value="25"></div>
+      <div class="field"><span class="lbl">Time warp</span>
+        <div class="seg" id="warp" role="group" aria-label="Time warp">
+          <button data-w="0">Pause</button><button data-w="1">1×</button><button data-w="10">10×</button><button data-w="60" aria-pressed="true">60×</button><button data-w="300">300×</button>
+        </div>
+      </div>
+      <button class="btn" id="route-btn">Show London → New York laser route</button>
+      <div class="shell-legend" id="shell-legend"></div>
+      <p class="small muted" style="margin:0">Drag to orbit, scroll or pinch to zoom. Click (or tap) the globe to move the user.</p>
+    </div>
+    <div class="output">
+      <div class="viewport" id="globe-view">
+        <div class="overlay hud" id="hud" aria-live="polite"></div>
+        <div class="overlay hud hud-br" id="hud-time"></div>
+      </div>
+      <div class="stats" style="margin-top:12px">
+        <div class="stat"><span class="v" id="st-vis">–</span><span class="k">satellites in view</span></div>
+        <div class="stat"><span class="v" id="st-range">–</span><span class="k">nearest slant range</span></div>
+        <div class="stat"><span class="v" id="st-lat">–</span><span class="k">one-way, user → satellite</span></div>
+        <div class="stat"><span class="v" id="st-rtt">–</span><span class="k">bent-pipe RTT floor</span></div>
+      </div>
+      <p class="small muted" id="route-out" style="margin:8px 0 0"></p>
+    </div>
+  </div>
+  <p class="small muted">“Bent-pipe RTT floor” assumes a gateway at the same slant range as the user, so a request and its reply each cross user→satellite→gateway: four legs at the speed of light. It is a floor, not a prediction of measured latency (see <a href="#lasers">§6</a>).</p>
+
+  <!-- ===================================================================== -->
+  <h2 id="coverage">3. Coverage math</h2>
+  <p>Draw the triangle formed by Earth’s centre, the user and the satellite. The user sees the satellite at elevation \(\varepsilon\) above the horizon, so the angle at the user is \(90^\circ + \varepsilon\). The law of sines gives the angle at the satellite (the nadir angle \(\eta\)), and the three angles add to 180°, which leaves the <strong>Earth central angle</strong> \(\lambda\) between the user and the point directly below the satellite:</p>
+  $$\sin\eta = \frac{R_\oplus\cos\varepsilon}{R_\oplus + h},\qquad \lambda = 90^\circ - \varepsilon - \eta,\qquad d = \sqrt{(R_\oplus+h)^2 - R_\oplus^2\cos^2\varepsilon} - R_\oplus\sin\varepsilon.$$
+  <p>The slant range \(d\) comes from the law of cosines on the same triangle. The footprint (all users who can see the satellite above \(\varepsilon\)) is a spherical cap of angular radius \(\lambda\), ground radius \(R_\oplus\lambda\) and area \(2\pi R_\oplus^2(1-\cos\lambda)\).</p>
+  <details class="derive">
+    <summary>How many satellites does continuous coverage need? (rough lower bound)</summary>
+    <p>One cap covers the fraction \(f = (1-\cos\lambda)/2\) of the sphere. Circles can’t tile a surface without overlapping. The best you can do is a honeycomb: each satellite “owns” the regular hexagon inscribed in its circle, which has \(\tfrac{3\sqrt3}{2\pi} \approx 0.827\) of the circle’s area. So</p>
+    $$N_{\min} \approx \frac{1}{0.827\,f} = \frac{2}{0.827\,(1-\cos\lambda)}.$$
+    <p>At 550 km and 25°, \(\lambda = 8.45^\circ\) and \(N_{\min} \approx 223\). Moving orbits can’t hold a static honeycomb, and inclined shells crowd satellites near their turning latitudes, so real constellations need several times this for single coverage (Walker’s and Rider’s “streets of coverage” analyses make this precise). Starlink flies thousands because it is limited by <em>capacity</em> (how many users each beam can serve), not by coverage. That is also why the minimum elevation matters so much: raising \(\varepsilon\) from 25° to 40° shrinks the footprint area by a factor of about 2.3.</p>
+  </details>
+  <div class="lab" aria-label="Coverage geometry calculator">
+    <div class="controls">
+      <div class="lab-title">Footprint calculator</div>
+      <div class="field"><label for="cv-h"><span>Altitude</span> <output for="cv-h"></output></label><input type="range" id="cv-h" min="300" max="1200" step="5" value="550"></div>
+      <div class="field"><label for="cv-e"><span>Minimum elevation</span> <output for="cv-e"></output></label><input type="range" id="cv-e" min="0" max="60" step="1" value="25"></div>
+      <table class="kv"><tbody id="cv-out"></tbody></table>
+    </div>
+    <div class="output">
+      <canvas class="plot" id="vis-plot" aria-label="Visible satellites versus latitude"></canvas>
+      <p class="small muted" id="vis-note">Computing visible counts from the constellation…</p>
+    </div>
+  </div>
+  <p>The plot is computed numerically, not from a formula: for each latitude, the page places a user at 16 longitudes and 6 instants, counts how many satellites of the authorised design sit above 25°, and reports the mean and the worst case. Notice the peaks just below 53° (the turning latitude of the biggest shells) and the plateau above 60° held up by the polar and 70° shells.</p>
+
+  <!-- ===================================================================== -->
+  <h2 id="phased-array">4. Phased-array antennas</h2>
+  <p>Both the satellite and the user terminal use flat <strong>phased arrays</strong>: hundreds to thousands of small antenna elements whose signals are added with controlled phase. Nothing moves; the beam is steered electronically in microseconds, so the user terminal can hop between satellites that cross its sky in a few minutes.</p>
+  <p>Take \(N\) identical elements on a line, spaced \(d\). A plane wave from angle \(\theta\) (measured from broadside, the perpendicular) reaches element \(m\) with an extra path \(m\,d\sin\theta\), i.e. a phase \(m\,kd\sin\theta\) with \(k = 2\pi/\lambda\). If we also apply a phase \(m\beta\) to element \(m\) and add everything up:</p>
+  $$AF(\theta) = \sum_{m=0}^{N-1} e^{\,j m \psi},\quad \psi = kd\sin\theta + \beta\qquad\Longrightarrow\qquad |AF| = \left|\frac{\sin(N\psi/2)}{\sin(\psi/2)}\right|.$$
+  <details class="derive">
+    <summary>Summing the geometric series</summary>
+    <p>\(\sum_{m=0}^{N-1} x^m = \dfrac{1-x^N}{1-x}\) with \(x = e^{j\psi}\). Factor out half-angles: \(1 - e^{jN\psi} = -2j\,e^{jN\psi/2}\sin(N\psi/2)\) and \(1 - e^{j\psi} = -2j\,e^{j\psi/2}\sin(\psi/2)\). The phase factors have modulus 1, leaving \(|AF| = |\sin(N\psi/2)/\sin(\psi/2)|\). Its maximum is \(N\), at \(\psi = 0\); dividing by \(N\) gives the normalised pattern plotted below. The full antenna pattern is this array factor times the pattern of one element.</p>
+  </details>
+  <ul>
+    <li><strong>Steering.</strong> The peak is at \(\psi = 0\). To put it at \(\theta_0\), choose the progressive phase \(\beta = -kd\sin\theta_0\). Then \(\psi = kd(\sin\theta - \sin\theta_0)\).</li>
+    <li><strong>Beamwidth.</strong> The first nulls are at \(\psi = \pm 2\pi/N\), and the half-power beamwidth is about \(\theta_{3\,\mathrm{dB}} \approx 0.886\,\lambda/(Nd\cos\theta_0)\) rad. Twice the elements gives half the beamwidth, and the beam fattens by \(1/\cos\theta_0\) as you scan, because the array looks shorter from off-axis.</li>
+    <li><strong>Grating lobes.</strong> \(|AF|\) is periodic in \(\psi\) with period \(2\pi\). Extra full-height peaks appear wherever \(\sin\theta_m = \sin\theta_0 + m\lambda/d\) lands inside \([-1, 1]\). To keep them out while scanning to \(\theta_0\), you need \(d/\lambda < 1/(1 + |\sin\theta_0|)\). At \(d \le \lambda/2\) the array can scan anywhere with no grating lobes.</li>
+    <li><strong>Scan loss.</strong> The projected aperture shrinks as \(\cos\theta_0\), so gain drops by about \(10\log_{10}\cos\theta_0\) dB (3 dB at 60°), and more in practice because each element’s own pattern also falls off. That is why the scheduler prefers high-elevation satellites, and why the user terminal is tilted.</li>
+  </ul>
+  <div class="lab" aria-label="Phased array factor demo">
+    <div class="controls">
+      <div class="lab-title">Array factor</div>
+      <div class="field"><label for="pa-n"><span>Elements \(N\)</span> <output for="pa-n"></output></label><input type="range" id="pa-n" min="2" max="64" step="1" value="16"></div>
+      <div class="field"><label for="pa-d"><span>Spacing \(d/\lambda\)</span> <output for="pa-d"></output></label><input type="range" id="pa-d" min="0.2" max="1.5" step="0.01" value="0.5"></div>
+      <div class="field"><label for="pa-s"><span>Steering angle \(\theta_0\)</span> <output for="pa-s"></output></label><input type="range" id="pa-s" min="-70" max="70" step="1" value="30"></div>
+      <div class="seg" id="pa-view" role="group" aria-label="Plot type"><button aria-pressed="true" data-v="polar">Polar</button><button data-v="linear">Linear (dB)</button></div>
+      <table class="kv"><tbody id="pa-out"></tbody></table>
+    </div>
+    <div class="output">
+      <div class="polar-wrap"><canvas class="polar" id="pa-polar" aria-label="Polar array factor plot"></canvas></div>
+      <canvas class="plot" id="pa-linear" hidden aria-label="Array factor in dB versus angle"></canvas>
+      <p class="small muted" style="margin:6px 0 0">Polar plot: radius is the normalised pattern in dB (0 to −40 dB), broadside is straight up. Push the spacing past λ/2 and steer hard to watch a grating lobe appear.</p>
+    </div>
+  </div>
+  <p>In two dimensions the same rules apply along both axes. A square array of \(N_{el}\) elements at \(\lambda/2\) spacing has aperture \(A = N_{el}\lambda^2/4\) and broadside directivity \(4\pi A/\lambda^2 = \pi N_{el}\). The Standard user terminal’s roughly 0.59 m × 0.38 m face <span class="est">est.</span> at 11.7 GHz (\(\lambda = 2.56\) cm) could hold about 1,400 elements at \(\lambda/2\), giving about 36 dBi before losses, or about 34.5 dBi at 65% efficiency.</p>
+
+  <!-- ===================================================================== -->
+  <h2 id="link-budget">5. Link budget</h2>
+  <p>A link budget follows the power from transmitter to receiver. The satellite radiates an equivalent isotropic power \(\text{EIRP} = P_tG_t\). At distance \(d\) it has spread over \(4\pi d^2\), and an antenna of gain \(G_r\) collects an effective area \(G_r\lambda^2/4\pi\). The ratio is the free-space path loss:</p>
+  $$\text{FSPL} = \left(\frac{4\pi d}{\lambda}\right)^2 = \left(\frac{4\pi d f}{c}\right)^2.$$
+  <p>The receiver adds thermal noise of spectral density \(N_0 = kT_{sys}\). In decibels, the carrier-to-noise-density ratio and the signal-to-noise ratio in bandwidth \(B\) are</p>
+  $$\frac{C}{N_0}\Big|_{\mathrm{dB\,Hz}} = \text{EIRP} - \text{FSPL} - L + \frac{G}{T} - 10\log_{10}k,\qquad \text{SNR} = \frac{C}{N_0} - 10\log_{10}B,\qquad C_{\text{Shannon}} = B\log_2(1 + \text{SNR}).$$
+  <p>Here \(10\log_{10}k = -228.6\) dBW/(K·Hz), \(L\) lumps atmospheric, pointing and polarisation losses, and \(G/T\) (the receive gain over system noise temperature) is the single figure of merit of a receiving terminal. At capacity, \(E_b/N_0\) equals the Shannon limit \((2^\eta-1)/\eta\) at spectral efficiency \(\eta = R/B\); a real modem with coding needs a few dB more.</p>
+  <div class="callout warn"><strong>Where the defaults come from.</strong> SpaceX doesn’t publish per-beam EIRP or terminal G/T, so the defaults are estimates (<span class="est">est.</span>): <em>EIRP</em> is back-solved from the ITU power-flux-density mask in 10.7–11.7 GHz (−140 dB(W/m²) in any 4 kHz for arrival angles above 25°, ITU RR Art. 21) at 550 km over 240 MHz; <em>G/T</em> ≈ 34.5 dBi (aperture estimate in §4) minus 10 log 180 K, less about 1.5 dB of scan loss. The Ku-band user downlink is 10.7–12.7 GHz in the FCC filings; 240 MHz is about one downlink channel <span class="est">est.</span>.</div>
+  <div class="lab" aria-label="Link budget calculator">
+    <div class="controls">
+      <div class="lab-title">Downlink calculator</div>
+      <div class="field"><label for="lb-f"><span>Frequency</span> <output for="lb-f"></output></label><input type="range" id="lb-f" min="10.7" max="12.7" step="0.05" value="11.7"></div>
+      <div class="field"><label for="lb-h"><span>Satellite altitude</span> <output for="lb-h"></output></label><input type="range" id="lb-h" min="300" max="1200" step="5" value="550"></div>
+      <div class="field"><label for="lb-e"><span>Elevation</span> <output for="lb-e"></output></label><input type="range" id="lb-e" min="10" max="90" step="1" value="25"></div>
+      <div class="field"><label for="lb-eirp"><span>EIRP per beam <span class="est">est.</span></span> <output for="lb-eirp"></output></label><input type="range" id="lb-eirp" min="20" max="50" step="0.1" value="33.6"></div>
+      <div class="field"><label for="lb-gt"><span>Terminal G/T <span class="est">est.</span></span> <output for="lb-gt"></output></label><input type="range" id="lb-gt" min="0" max="20" step="0.1" value="10.5"></div>
+      <div class="field"><label for="lb-b"><span>Channel bandwidth <span class="est">est.</span></span> <output for="lb-b"></output></label><input type="range" id="lb-b" min="10" max="500" step="10" value="240"></div>
+      <div class="field"><label for="lb-l"><span>Other losses (gas, pointing, rain margin)</span> <output for="lb-l"></output></label><input type="range" id="lb-l" min="0" max="15" step="0.1" value="1.5"></div>
+    </div>
+    <div class="output">
+      <div class="table-wrap"><table class="kv"><tbody id="lb-out"></tbody></table></div>
+      <p class="small muted" id="lb-note"></p>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="lasers">6. Laser links and latency</h2>
+  <p>Light in glass fibre travels at \(c/n\) with group index \(n \approx 1.47\), about 32% slower than in vacuum. Satellites linked by lasers carry light at the full \(c\). So for long distances a path that climbs 550 km, runs along the shell and comes back down can beat even a perfectly straight fibre. Ignoring the minimum elevation, the up-over-down path wins once</p>
+  $$\frac{2h + (R_\oplus + h)\theta}{c} < \frac{n R_\oplus\theta}{c}\quad\Longleftrightarrow\quad \theta > \frac{2h}{R_\oplus(n-1) - h},$$
+  <p>which is about 2,870 km of ground distance at 550 km. With 25° slant legs (each one already covers 940 km of ground horizontally), the bound is better still. Real fibre routes are longer than great circles, so the advantage grows. Each Starlink satellite since v1.5 carries laser terminals (SpaceX says three per V2 mini <span class="est">est.</span>). The page routes London → New York on a “+Grid” topology: every satellite in the 550 km / 53° shell links to its two in-plane neighbours and to the same slot in each adjacent plane. The page then finds the shortest path with Dijkstra’s algorithm, from a satellite the London user can see to one the New York user can see.</p>
+  <div class="grid cols-2">
+    <div>
+      <div class="table-wrap"><table class="kv"><tbody id="lat-out"></tbody></table></div>
+      <p class="small muted">The routed path averages several instants of the shell. Ground segments (gateway → internet point of presence) and processing are not included, so every row is a propagation-only lower bound.</p>
+    </div>
+    <div><canvas class="plot" id="lat-plot" aria-label="Latency versus distance"></canvas></div>
+  </div>
+  <h3>Comparing like with like</h3>
+  <p>SpaceX’s own latency explainer quotes the speed-of-light part as 1.8–3.6 ms per ground↔satellite leg and “usually under 10 ms for the round trip”. Our geometry gives 1.83 ms straight up and 3.75 ms at the 25° edge (see the <a href="validation.html">Validation</a> page). The <em>measured</em> median round trip is much larger, 25.7 ms in the US at peak hours as of mid-2025, because it also includes radio scheduling on the shared beam, processing, gateway-to-internet backhaul and queueing. Propagation is a floor, not a prediction: what our model can say is that about 60–70% of today’s median is not physics but engineering, which is why SpaceX was able to cut its median from 48.5 ms to 33 ms in a few months of 2024 mostly with software.</p>
+
+  <!-- ===================================================================== -->
+  <h2 id="bus">7. Satellite bus basics and economics</h2>
+  <p>A V2 mini weighs about 800 kg at launch (SpaceX/Spaceflight Now, 2023) and is a flat panel designed to stack tightly in a Falcon 9 fairing, with two large solar arrays, phased arrays on the Earth-facing side, laser terminals and an electric propulsion system. The first-generation satellites used krypton Hall thrusters. The V2 mini’s argon Hall thruster was developed in-house and has 2.4× the thrust and 1.5× the specific impulse of the krypton unit: about 170 mN and \(I_{sp}\approx 2{,}500\) s <span class="est">est.</span>, so krypton is roughly 1,500–1,700 s <span class="est">est.</span>. Argon is far cheaper than xenon, which matters when you’re buying propellant for thousands of satellites.</p>
+  <p>Falcon 9 drops the stack in a low orbit (≈280–350 km <span class="est">est.</span>). Each satellite checks itself out there and then spirals up on electric thrust. A satellite that fails checkout is already low enough to re-enter on its own. For a slow, tangential, coplanar spiral, every orbit along the way is nearly circular, and the thrust exactly cancels the speed change between them:</p>
+  $$\Delta v_{\text{spiral}} \approx |v_1 - v_2| = \left|\sqrt{\mu/r_1} - \sqrt{\mu/r_2}\right|,\qquad m_p = m_0\left(1 - e^{-\Delta v/(I_{sp}g_0)}\right),\qquad t \approx \frac{m\,\Delta v}{F}.$$
+  <p>Once up, the satellite still fights drag. For a circular orbit, drag \(\tfrac12\rho v^2C_DA\) removes orbital energy \(-\mu m/2a\), which gives the decay rate</p>
+  $$\frac{da}{dt} = -\frac{\rho\sqrt{\mu a}}{B},\qquad B = \frac{m}{C_D A}.$$
+  <p>Thermospheric density \(\rho\) falls by roughly a factor of 30 between 300 and 550 km, and it swings by an order of magnitude with the 11-year solar cycle. That is the safety story of low orbits: a dead satellite at 550 km comes down within a few years, one at 300 km within days to weeks. In February 2022 a geomagnetic storm raised the density at the ~210 km insertion orbit enough to bring down most of a batch of 49 satellites.</p>
+  <div class="lab" aria-label="Orbit raising and decay calculator">
+    <div class="controls">
+      <div class="lab-title">Orbit raising and decay</div>
+      <div class="field"><label for="bu-h1"><span>Insertion altitude <span class="est">est.</span></span> <output for="bu-h1"></output></label><input type="range" id="bu-h1" min="200" max="400" step="5" value="290"></div>
+      <div class="field"><label for="bu-h2"><span>Operational altitude</span> <output for="bu-h2"></output></label><input type="range" id="bu-h2" min="400" max="600" step="5" value="550"></div>
+      <div class="field"><label for="bu-m"><span>Satellite mass <span class="est">est.</span></span> <output for="bu-m"></output></label><input type="range" id="bu-m" min="250" max="2000" step="10" value="800"></div>
+      <div class="field"><label for="bu-isp"><span>Thruster \(I_{sp}\) <span class="est">est.</span></span> <output for="bu-isp"></output></label><input type="range" id="bu-isp" min="1000" max="3000" step="50" value="2500"></div>
+      <div class="field"><label for="bu-f"><span>Thrust</span> <output for="bu-f"></output></label><input type="range" id="bu-f" min="20" max="400" step="5" value="170"></div>
+      <div class="field"><label for="bu-b"><span>Ballistic coefficient \(m/C_DA\) <span class="est">est.</span></span> <output for="bu-b"></output></label><input type="range" id="bu-b" min="5" max="80" step="1" value="18"></div>
+      <div class="field"><span class="lbl">Solar activity</span>
+        <div class="seg" id="bu-sun" role="group" aria-label="Solar activity"><button data-s="0.4">Low</button><button data-s="1" aria-pressed="true">Mean</button><button data-s="3">High</button></div>
+      </div>
+      <table class="kv"><tbody id="bu-out"></tbody></table>
+    </div>
+    <div class="output"><canvas class="plot" id="decay-plot" aria-label="Altitude versus time with no thrust"></canvas>
+      <p class="small muted" style="margin:6px 0 0">Passive decay with no thrust: exponential thermosphere (Vallado’s mean-activity table) scaled by the solar setting, integrated down to 150 km, after which re-entry takes hours.</p></div>
+  </div>
+  <h3>Satellites per launch</h3>
+  <p>Falcon 9 carries 21–29 V2 mini satellites per launch, depending on version and landing mode (Wikipedia’s launch list). That number is mostly mass: a reusable Falcon 9 lifts on the order of 17 t <span class="est">est.</span> to the low insertion orbit, and \(17{,}000/800 \approx 21\). Lighter variants and lower insertion squeeze in more. At Falcon 9’s published list price of about \$70 M, a launch of 24 satellites would cost about \$2.9 M per satellite. SpaceX launches its own satellites on reused boosters at an internal cost well below list (see the <a href="cost.html">Cost</a> page), which is what makes refreshing a constellation of satellites with ~5-year lives affordable.</p>
+
+  <h2 id="exercises">Exercises</h2>
+  <div id="exercise-list"></div>
+
+  <h2 id="sources">Sources</h2>
+  <ol class="source-list">
+    <li><a href="https://docs.fcc.gov/public/attachments/FCC-21-48A1.pdf">FCC 21-48, SpaceX modification order for the Gen1 NGSO system (April 2021): shells, planes, satellites per plane, 25° minimum elevation</a></li>
+    <li><a href="https://docs.fcc.gov/public/attachments/FCC-22-91A1.pdf">FCC 22-91, SpaceX Gen2 partial grant (December 2022): up to 7,500 satellites at 525/530/535 km, 53°/43°/33°</a></li>
+    <li><a href="https://www.starlink.com/public-files/StarlinkLatency.pdf">Starlink, “Improving Starlink’s latency” (2024): 1.8–3.6 ms per leg, 48.5 → 33 ms US median</a></li>
+    <li><a href="https://starlink.com/updates/network-update">Starlink network update (2025): US median peak-hour latency 25.7 ms</a></li>
+    <li><a href="https://spaceflightnow.com/2023/02/27/falcon-9-starlink-6-1-live-coverage/">Spaceflight Now, V2 mini details (2023): ~800 kg, argon Hall thruster 2.4× thrust, 1.5× Isp</a></li>
+    <li><a href="https://en.wikipedia.org/wiki/Starlink">Wikipedia, Starlink (satellite versions, satellites per launch, Feb 2022 storm loss)</a></li>
+    <li><a href="https://www.starlink.com/specifications">Starlink, terminal specifications (antenna dimensions)</a></li>
+    <li><a href="https://celestrak.org/NORAD/elements/table.php?GROUP=starlink&amp;FORMAT=tle">CelesTrak, Starlink orbital elements (mean motion ≈ 15.06 rev/day at 550 km)</a></li>
+    <li><a href="https://ui.adsabs.harvard.edu/abs/1984JBIS...37..559W">J. G. Walker, “Satellite constellations”, JBIS 37 (1984) 559–572</a></li>
+    <li><a href="https://celestrak.org/software/vallado-sw.php">D. A. Vallado, Fundamentals of Astrodynamics and Applications (J2 secular rates; exponential atmosphere table)</a></li>
+    <li><a href="https://www.wiley.com/en-us/Antenna+Theory%3A+Analysis+and+Design%2C+4th+Edition-p-9781118642061">C. A. Balanis, Antenna Theory: Analysis and Design, 4th ed. (array factor, grating lobes)</a></li>
+    <li><a href="https://www.itu.int/pub/R-REG-RR">ITU Radio Regulations, Article 21 (power-flux-density limits, 10.7–11.7 GHz)</a></li>
+    <li><a href="https://doi.org/10.1145/3286062.3286075">M. Handley, “Delay is Not an Option: Low Latency Routing in Space”, HotNets 2018</a></li>
+    <li><a href="https://doi.org/10.2514/8.5723">T. N. Edelbaum, “Propulsion Requirements for Controllable Satellites”, ARS Journal 31 (1961)</a></li>
+    <li><a href="https://www.spacex.com/media/Capabilities&amp;Services.pdf">SpaceX, Capabilities &amp; Services (Falcon 9 list price)</a></li>
+  </ol>
+</main>
+</body>
+</html>

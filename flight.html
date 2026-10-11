@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Physics · Moonshot</title>
+<meta name="description" content="From the pad to orbit: the atmosphere, gravity turns, max-Q, staging, losses and orbital mechanics, with a working ascent simulator.">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="css/style.css">
+<script type="module" src="js/common.js"></script>
+<script type="module" src="js/pages/flight.js"></script>
+<style>
+  .loss-bar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); margin: 6px 0 4px; }
+  .loss-bar > div { display: grid; place-items: center; font-size: .72rem; color: #fff; white-space: nowrap; overflow: hidden; }
+  .events { font-size: .85rem; margin: 6px 0 0; padding-left: 18px; }
+  .events li { margin: 2px 0; }
+  canvas#hohmann-canvas { width: 100%; height: 300px; display: block; }
+  .plots-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
+  .plots-2 canvas.plot { height: 240px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="page-hero">
+    <div class="eyebrow">Section 02 · Flight physics</div>
+    <h1>From the pad to orbit</h1>
+    <p class="lead">Space is only ~100 km up, an hour’s drive. Orbit is hard because you have to go <strong>7.8 km/s sideways</strong> and pay a toll to gravity and air on the way. This page simulates a real ascent and shows exactly where the Δv goes.</p>
+    <nav class="toc">
+      <a href="#atmosphere">The atmosphere</a><a href="#orbit-is-sideways">Orbit is sideways</a><a href="#ascent">Ascent simulator</a>
+      <a href="#losses">Where Δv goes</a><a href="#staging">Staging</a><a href="#orbits">Orbital mechanics</a><a href="#exercises">Exercises</a><a href="#sources">Sources</a>
+    </nav>
+  </section>
+
+  <h2 id="atmosphere">1. The atmosphere we fly through</h2>
+  <p>Hydrostatic balance (\(dp/dz = -\rho g\)) plus the ideal-gas law (\(p = \rho R T\)) give pressure that falls roughly exponentially with altitude, with scale height \(H = RT/g ≈ 7\) km. The <em>U.S. Standard Atmosphere 1976</em> refines this with seven layers of piecewise-linear temperature:</p>
+  $$ p(h) = \begin{cases} p_b\left(\dfrac{T_b}{T_b + L_b (h - h_b)}\right)^{g_0/(R L_b)} & L_b \ne 0 \\[2mm] p_b \exp\!\left(-\dfrac{g_0 (h-h_b)}{R T_b}\right) & L_b = 0 \end{cases} $$
+  <p>where \(h\) is <em>geopotential</em> altitude and \(L_b\) the layer’s lapse rate. The model on this site implements exactly that and matches the published tables to better than 0.2 % (see <a href="validation.html">Validation</a>).</p>
+  <canvas class="plot" id="atm-plot" aria-label="Atmosphere profile"></canvas>
+
+  <h2 id="orbit-is-sideways">2. Orbit is going sideways fast enough to keep missing the ground</h2>
+  <p>Newton’s cannonball: fire horizontally fast enough and the ground curves away as fast as you fall. For a circular orbit, gravity is exactly the centripetal force:</p>
+  $$ \frac{\mu}{r^2} = \frac{v^2}{r} \;\Rightarrow\; v_{circ} = \sqrt{\frac{\mu}{r}} ≈ 7.78\ \text{km/s at 200 km} $$
+  <p>Climbing 200 km costs comparatively little energy (\(g h\) ≈ 2 MJ/kg vs \(v^2/2\) ≈ 30 MJ/kg for the speed). But the rocket must first get out of the thick lower atmosphere, and every second it spends thrusting against gravity is wasted. The compromise is the <strong>gravity turn</strong>: rise vertically for a few seconds, tip over a few degrees (the “pitch kick”), then let gravity bend the trajectory while the engines push along the velocity vector, so there’s no angle of attack and no sideways aerodynamic load.</p>
+
+  <h2 id="ascent">3. Ascent simulator</h2>
+  <p class="muted">A 2-D point-mass simulation in an inertial frame: inverse-square gravity, the US-1976 atmosphere rotating with Earth, drag \(D = q C_D A\), Isp and thrust that change with ambient pressure, a gravity turn for stage 1, a max-Q throttle bucket, and a closed-loop guidance law for stage 2 (zero-effort-miss/zero-effort-velocity in the radial direction, \(a_r = 6\,\mathrm{ZEM}/t_{go}^2 - 2\,\mathrm{ZEV}/t_{go}\)) that drives altitude to the target and radial speed to zero. Stage masses are public estimates.</p>
+  <div class="lab" id="lab-ascent">
+    <div class="controls">
+      <p class="lab-title">Fly it</p>
+      <div class="seg" role="group" aria-label="Vehicle"><button data-veh="falcon9" aria-pressed="true">Falcon 9</button><button data-veh="starship" aria-pressed="false">Starship</button></div>
+      <div class="field"><label for="as-payload">Payload <output for="as-payload"></output></label><input type="range" id="as-payload" min="0" max="40" step="0.5" value="15"></div>
+      <div class="field"><label for="as-kick">Pitch-kick angle <output for="as-kick"></output></label><input type="range" id="as-kick" min="1" max="10" step="0.25" value="4"></div>
+      <div class="field"><label for="as-q">Max-Q throttle limit <output for="as-q"></output></label><input type="range" id="as-q" min="20" max="60" step="1" value="35"></div>
+      <div class="field"><label for="as-res">Booster landing reserve <output for="as-res"></output></label><input type="range" id="as-res" min="0" max="20" step="1" value="0"></div>
+      <div class="field"><label for="as-alt">Target orbit altitude <output for="as-alt"></output></label><input type="range" id="as-alt" min="160" max="600" step="10" value="200"></div>
+      <div class="row"><button class="btn primary" id="as-run">Launch</button><button class="btn" id="as-max">Find max payload</button></div>
+      <div id="as-result"></div>
+    </div>
+    <div class="output">
+      <canvas class="plot" id="as-traj" aria-label="Trajectory: altitude versus downrange"></canvas>
+      <div class="plots-2">
+        <canvas class="plot" id="as-speed" aria-label="Speed and altitude versus time"></canvas>
+        <canvas class="plot" id="as-q-plot" aria-label="Dynamic pressure and acceleration versus time"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <h2 id="losses">4. Where the Δv goes</h2>
+  <p>Project the equation of motion onto the velocity direction and integrate. The Δv the engines produce (\(\int F/m\,dt\)) splits into what you actually gain plus three losses:</p>
+  $$ \underbrace{\int \frac{F}{m}\,dt}_{\text{rocket equation}} = \Delta v_{gained} + \underbrace{\int g \sin\gamma\, dt}_{\text{gravity}} + \underbrace{\int \frac{D}{m}\, dt}_{\text{drag}} + \underbrace{\int \frac{F}{m}(1-\cos\alpha)\, dt}_{\text{steering}} $$
+  <p>\(\gamma\) is the flight-path angle above horizontal and \(\alpha\) the angle between thrust and velocity. Gravity loss dominates: a big rocket is heavy and accelerates slowly at first. Drag loss is surprisingly small for big rockets (the square-cube law: mass grows faster than frontal area). Steering loss is what upper-stage guidance spends pointing thrust partly upward to hold altitude while it builds horizontal speed.</p>
+  <div class="panel" id="loss-panel"><span class="muted">Run the simulator to see this flight’s loss budget.</span></div>
+
+  <h2 id="staging">5. Staging: throwing away dead weight</h2>
+  <p>Give each of \(N\) stages the same Isp and structural coefficient \(\varepsilon = m_{dry}/(m_{dry}+m_{prop})\), and split Δv equally (optimal in that case). Each stage’s mass ratio is \(R = e^{\Delta v/(N I_{sp} g_0)}\), and the payload fraction is</p>
+  $$ \pi = \left(\frac{\lambda}{1+\lambda}\right)^N, \qquad \lambda = \frac{1-\varepsilon R}{R-1}. $$
+  <p>If \(\varepsilon R \ge 1\) a stage cannot even carry its own structure: the mission is impossible with that many stages.</p>
+  <div class="lab" id="lab-staging">
+    <div class="controls">
+      <p class="lab-title">How many stages?</p>
+      <div class="field"><label for="st-isp">Isp (all stages) <output for="st-isp"></output></label><input type="range" id="st-isp" min="250" max="460" step="1" value="330"></div>
+      <div class="field"><label for="st-eps">Structural coefficient ε <output for="st-eps"></output></label><input type="range" id="st-eps" min="0.03" max="0.2" step="0.005" value="0.08"></div>
+      <div class="field"><label for="st-dv">Mission Δv <output for="st-dv"></output></label><input type="range" id="st-dv" min="4000" max="16000" step="100" value="9400"></div>
+      <p class="small muted" id="st-note"></p>
+    </div>
+    <div class="output"><canvas class="plot" id="st-plot" aria-label="Payload fraction versus number of stages"></canvas></div>
+  </div>
+  <div class="callout note"><strong>The reuse twist.</strong> Recovering a booster means keeping 10–15 % of its propellant for boostback and landing, plus legs and grid fins: payload drops ~25–30 % (try the reserve slider above). SpaceX’s bet is that flying the same booster 20–30 times saves far more money than the lost payload costs. See <a href="cost.html">Cost</a>.</div>
+
+  <h2 id="orbits">6. Orbital mechanics</h2>
+  <p>Energy conservation per unit mass, \(\tfrac12 v^2 - \mu/r = -\mu/(2a)\), gives the <strong>vis-viva equation</strong>, the workhorse of mission design:</p>
+  $$ v^2 = \mu\left(\frac{2}{r} - \frac{1}{a}\right), \qquad T = 2\pi\sqrt{\frac{a^3}{\mu}} $$
+  <p>The cheapest two-impulse transfer between circular orbits is the <strong>Hohmann transfer</strong>: an ellipse tangent to both, with burns at perigee and apogee.</p>
+  <div class="lab" id="lab-hohmann">
+    <div class="controls">
+      <p class="lab-title">Hohmann transfer calculator</p>
+      <div class="field"><label for="ho-r1">Start orbit altitude <output for="ho-r1"></output></label><input type="range" id="ho-r1" min="160" max="2000" step="10" value="200"></div>
+      <div class="field"><label for="ho-r2">Target orbit altitude <output for="ho-r2"></output></label><input type="range" id="ho-r2" min="300" max="400000" step="100" value="35786"></div>
+      <div class="row"><button class="btn" data-preset="35786">GEO</button><button class="btn" data-preset="20200">GPS</button><button class="btn" data-preset="550">Starlink</button><button class="btn" data-preset="378000">Moon distance</button></div>
+      <div class="stats">
+        <div class="stat"><span class="v" id="ho-dv1">—</span><span class="k">burn 1 (m/s)</span></div>
+        <div class="stat"><span class="v" id="ho-dv2">—</span><span class="k">burn 2 (m/s)</span></div>
+        <div class="stat"><span class="v" id="ho-tot">—</span><span class="k">total (m/s)</span></div>
+        <div class="stat"><span class="v" id="ho-tof">—</span><span class="k">transfer time</span></div>
+      </div>
+    </div>
+    <div class="output"><canvas id="hohmann-canvas" aria-label="Hohmann transfer diagram"></canvas></div>
+  </div>
+  <p>Going to the Moon is “just” a very long Hohmann-like transfer, except the Moon’s gravity takes over near the end. The <a href="moon.html">Moon mission</a> page integrates the full Earth–Moon problem.</p>
+
+  <h2 id="exercises">Exercises</h2>
+  <div id="exercise-list"></div>
+
+  <h2 id="sources">Sources</h2>
+  <ol class="source-list" id="source-list"></ol>
+</main>
+</body>
+</html>

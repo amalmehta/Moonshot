@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validation · Moonshot</title>
+<meta name="description" content="Every model on this site checked against published figures: computed value, reported value, error, tolerance and source.">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="css/style.css">
+<script type="module" src="js/common.js"></script>
+<script type="module" src="js/pages/validation.js"></script>
+<style>
+  #val-table td { font-size: .88rem; }
+  #val-table td.note { color: var(--fg-muted); font-size: .8rem; max-width: 360px; }
+  .err-bar { position: relative; height: 10px; width: 120px; background: var(--bg-sunk); border-radius: 5px; }
+  .err-bar span { position: absolute; top: 0; height: 100%; border-radius: 5px; }
+  .err-bar .tol { background: color-mix(in srgb, var(--good) 22%, transparent); }
+  .err-bar .mark { width: 3px; background: var(--fg); }
+  .section-row td { background: var(--bg-sunk); font-weight: 700; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="page-hero">
+    <div class="eyebrow">Validation</div>
+    <h1>Checked against the real thing</h1>
+    <p class="lead">This project is a reimplementation in the spirit of a paper study: every model is derived from first principles, then compared with a <strong>published figure</strong>. Each row is computed live in your browser by the same code the pages use, and the same rows run as automated tests (<code>npm test</code>). The tolerance is the error we consider honest for that model, and the note says what the model leaves out.</p>
+  </section>
+  <div class="stats card" id="val-summary"><span class="muted">Running every model…</span></div>
+  <h2 id="table">All checks</h2>
+  <p class="small muted">Error bar: the green band is the allowed tolerance (±), the black tick is the actual error. Calibration inputs (the Merlin 1D and Raptor 2 Isp the gas model was fitted to) are deliberately <em>not</em> listed: only predictions count.</p>
+  <div class="table-wrap"><table id="val-table"><thead><tr><th>Quantity</th><th class="num">Model</th><th class="num">Published</th><th class="num">Error</th><th>vs tolerance</th><th>Source</th><th>What the model assumes</th></tr></thead><tbody></tbody></table></div>
+  <h2 id="method">Method</h2>
+  <ul>
+    <li><strong>Inputs</strong> are public: SpaceX vehicle pages and user’s guide, FAA/FCC/NASA documents, and (marked “est.”) widely cited estimates where SpaceX hasn’t published a number.</li>
+    <li><strong>No fitting to the answer.</strong> The only fitted parameters are the effective exhaust-gas γ and molar mass, each fitted to one engine (Merlin 1D, Raptor 2) and then used to <em>predict</em> the others. The ascent pitch-kick angle was chosen to maximize payload, as a real trajectory designer would, not to match 22.8 t.</li>
+    <li><strong>Tolerances</strong> reflect model fidelity: tight (≤ 1 %) for exact physics such as standard-atmosphere tables and Kepler periods; loose (10–25 %) where the inputs themselves are estimates (stage masses, costs).</li>
+  </ul>
+</main>
+</body>
+</html>

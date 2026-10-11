@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hardware & Materials · Moonshot</title>
+<meta name="description" content="What a rocket is made of: tanks, pressure vessels, buckling, why Starship is stainless steel, re-entry heating and heat shields.">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="css/style.css">
+<script type="module" src="js/common.js"></script>
+<script type="module" src="js/pages/structures.js"></script>
+<style>
+  .mat-table td:first-child { white-space: nowrap; }
+  .swatch-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="page-hero">
+    <div class="eyebrow">Section 03 · Hardware & materials</div>
+    <h1>What a rocket is made of</h1>
+    <p class="lead">A rocket stage is a pressurized balloon of propellant with an engine bolted to one end. More than 90 % of its liftoff mass is propellant, so every kilogram of structure is a kilogram of payload lost. Here’s how tanks are sized, why they buckle, why Starship is made of stainless steel, and how a ship survives re-entry.</p>
+    <nav class="toc">
+      <a href="#anatomy">Anatomy of a stage</a><a href="#pressure">Pressure vessels</a><a href="#materials">Materials</a><a href="#tank-lab">Tank lab</a>
+      <a href="#thermal">Re-entry heating</a><a href="#tps">Heat shields</a><a href="#landing-hw">Landing hardware</a><a href="#manufacturing">Manufacturing</a><a href="#exercises">Exercises</a><a href="#sources">Sources</a>
+    </nav>
+  </section>
+
+  <h2 id="anatomy">1. Anatomy of a stage</h2>
+  <div class="grid cols-3">
+    <div class="card"><h3>Propellant tanks</h3><p>Two tanks, oxidizer and fuel, are usually separated by a <em>common bulkhead</em> (one dome shared by both) to save length and mass. Falcon 9 uses separate aluminium-lithium tanks; Starship uses welded stainless-steel rings with common domes. LOX sits on top on Falcon 9 because it’s denser, which keeps the centre of mass forward for stability.</p><div class="tags"><span class="tag" style="--h:86">Structures</span></div></div>
+    <div class="card"><h3>Pressurization</h3><p>Tanks are kept at a few bar so pumps don’t cavitate and the thin walls stay stiff. Falcon 9 uses helium from carbon-overwrapped pressure vessels (COPVs) <em>submerged in LOX</em>; a COPV strut failure destroyed CRS-7 (2015), and a COPV liner/LOX interaction destroyed AMOS-6 (2016). Starship pressurizes <em>autogenously</em>: it bleeds warmed methane and oxygen gas back into the tanks, so there’s no helium at all.</p><div class="tags"><span class="tag" style="--h:86">Structures</span><span class="tag" style="--h:30">Propulsion</span></div></div>
+    <div class="card"><h3>Thrust structure</h3><p>Falcon 9’s nine Merlins sit in the <em>Octaweb</em> (8 around 1), which spreads ~7.6 MN into the tank wall. Super Heavy’s 33 Raptors push ~74 MN through a thrust puck and dome, the largest thrust ever produced by a single stage.</p><div class="tags"><span class="tag" style="--h:86">Structures</span><span class="tag" style="--h:18">Engines</span></div></div>
+    <div class="card"><h3>Interstage & separation</h3><p>Falcon 9 separates stages with pneumatic pushers. Starship <em>hot-stages</em>: the ship lights its engines while still attached, exhausting through a vented ring on top of the booster. That gains a few % payload because there’s no coast without thrust.</p><div class="tags"><span class="tag" style="--h:86">Structures</span></div></div>
+    <div class="card"><h3>Avionics & control surfaces</h3><p>Flight computers, IMUs, GPS, radios, batteries and actuators. On re-entry, Falcon 9 steers with grid fins and cold-gas nitrogen thrusters; Starship belly-flops and steers with four flaps. Details on <a href="software.html">Flight Software</a>.</p><div class="tags"><span class="tag" style="--h:286">Software</span><span class="tag" style="--h:300">GNC</span></div></div>
+    <div class="card"><h3>Thermal protection</h3><p>Falcon 9 boosters return at ~2 km/s and survive with an entry burn plus ablative/insulating coatings around the engines. Starship returns from orbit at ~7.5 km/s and needs a full heat shield of ~18,000 (est.) hexagonal ceramic tiles.</p><div class="tags"><span class="tag" style="--h:100">Thermal</span></div></div>
+  </div>
+
+  <h2 id="pressure">2. Pressure vessels and buckling</h2>
+  <p>Slice a thin cylinder of radius \(r\), wall \(t\), along its axis. Internal pressure \(p\) pushes on the projected area \(2rL\), and two strips of wall \(tL\) hold it together:</p>
+  $$ \sigma_{hoop} = \frac{p\,r}{t}, \qquad \sigma_{axial} = \frac{p\,r}{2t}, \qquad t_{min} = \frac{p\,r\,SF}{\sigma_y\,\eta_{weld}} $$
+  <p>So wall thickness grows with diameter: a 9 m Starship at 6 bar needs about 2.4× the thickness of a 3.7 m Falcon 9 at the same stress. Under <em>compression</em> (thrust, weight, aerodynamic bending) a thin shell fails by buckling long before the material yields:</p>
+  $$ \sigma_{cr} = \gamma\,\frac{E\,t}{R\sqrt{3(1-\nu^2)}} $$
+  <p>where the empirical knock-down \(\gamma ≈ 0.2\text{–}0.4\) accounts for tiny shape imperfections (NASA SP-8007). The fix is either stiffening (Falcon 9’s machined isogrid/orthogrid panels, Starship’s stringers) or pressure: internal pressure pre-tensions the wall, so a stage that holds ~2 bar can take far more axial load. That’s why empty stages stay pressurized.</p>
+
+  <h2 id="materials">3. Materials: why Starship is stainless steel</h2>
+  <p>In early 2019 SpaceX switched Starship from carbon-fibre composite to stainless steel. On a cold day, carbon fibre is lightest per unit strength. But a rocket isn’t only cold: it is <strong>cryogenic</strong> inside (LOX ~ 90 K) and <strong>hot</strong> outside during ascent heating, hot staging and re-entry. The right comparison is strength-per-density across the whole temperature range a part sees:</p>
+  <div class="grid cols-2">
+    <canvas class="plot" id="mat-yield" aria-label="Yield strength versus temperature by material"></canvas>
+    <canvas class="plot" id="mat-spec" aria-label="Specific strength versus temperature by material"></canvas>
+  </div>
+  <div class="table-wrap"><table class="mat-table"><thead><tr><th>Material</th><th class="num">Density (kg/m³)</th><th class="num">Yield at 90 K</th><th class="num">at 293 K</th><th class="num">at 700 K</th><th>Notes</th></tr></thead><tbody id="mat-table"></tbody></table></div>
+  <p class="small muted">Material curves are representative handbook-style values (est.). SpaceX’s “30X” steels and alloys like SX500 are proprietary.</p>
+
+  <h2 id="tank-lab">Tank lab: size a tank in different materials</h2>
+  <div class="lab" id="lab-tank">
+    <div class="controls">
+      <p class="lab-title">Same job, different metal</p>
+      <div class="field"><label for="tk-d">Diameter <output for="tk-d"></output></label><input type="range" id="tk-d" min="1" max="12" step="0.1" value="9"></div>
+      <div class="field"><label for="tk-l">Barrel length <output for="tk-l"></output></label><input type="range" id="tk-l" min="5" max="60" step="1" value="30"></div>
+      <div class="field"><label for="tk-p">Tank pressure <output for="tk-p"></output></label><input type="range" id="tk-p" min="1" max="10" step="0.1" value="6"></div>
+      <div class="field"><label for="tk-T">Hottest wall temperature in flight <output for="tk-T"></output></label><input type="range" id="tk-T" min="20" max="1000" step="10" value="90"></div>
+      <div class="field"><label for="tk-sf">Safety factor <output for="tk-sf"></output></label><input type="range" id="tk-sf" min="1.1" max="2" step="0.05" value="1.4"></div>
+      <p class="small muted">Wall sized by hoop stress at the chosen temperature (weld efficiency 0.75), with a 1.5 mm minimum gauge for handling and welding.</p>
+    </div>
+    <div class="output">
+      <div class="table-wrap"><table><thead><tr><th>Material</th><th class="num">Wall (mm)</th><th class="num">Shell mass (t)</th><th class="num">Material cost (est.)</th><th>Verdict</th></tr></thead><tbody id="tk-table"></tbody></table></div>
+      <p class="small" id="tk-note"></p>
+    </div>
+  </div>
+
+  <h2 id="thermal">4. Re-entry heating</h2>
+  <p>Coming back from orbit, the vehicle carries \(\tfrac12 v^2 ≈ 30\) MJ/kg of kinetic energy, enough to vaporize it several times over. Almost all of it goes into the air through a shock wave; the art is letting only a small fraction reach the vehicle. A blunt body pushes the shock away from its surface (Allen & Eggers, 1950s), and the stagnation-point convective heat flux follows the <strong>Sutton–Graves</strong> correlation:</p>
+  $$ \dot q_s = k\,\sqrt{\frac{\rho}{R_n}}\,v^3, \qquad k = 1.7415\times10^{-4}\ \text{(Earth air, SI)} $$
+  <p>A radiating surface settles where it emits as much as it receives: \(\varepsilon\sigma T^4 = \dot q\). The \(v^3\) scaling is brutal: a Falcon 9 booster at ~2 km/s gets about 1/50 of the heating of an orbital ship.</p>
+  <div class="lab" id="lab-heat">
+    <div class="controls">
+      <p class="lab-title">Heat flux and wall temperature</p>
+      <div class="field"><label for="ht-v">Speed <output for="ht-v"></output></label><input type="range" id="ht-v" min="1000" max="11500" step="100" value="7000"></div>
+      <div class="field"><label for="ht-h">Altitude <output for="ht-h"></output></label><input type="range" id="ht-h" min="30" max="100" step="1" value="70"></div>
+      <div class="field"><label for="ht-rn">Effective nose radius <output for="ht-rn"></output></label><input type="range" id="ht-rn" min="0.1" max="10" step="0.1" value="4.5"></div>
+      <div class="field"><label for="ht-eps">Surface emissivity <output for="ht-eps"></output></label><input type="range" id="ht-eps" min="0.3" max="0.95" step="0.01" value="0.85"></div>
+      <div class="row"><button class="btn" data-heat="starship">Starship orbital</button><button class="btn" data-heat="f9">F9 booster entry burn</button><button class="btn" data-heat="lunar">Lunar return</button></div>
+    </div>
+    <div class="output">
+      <div class="stats">
+        <div class="stat"><span class="v" id="ht-q">—</span><span class="k">heat flux (W/cm²)</span></div>
+        <div class="stat"><span class="v" id="ht-T">—</span><span class="k">equilibrium temp (°C)</span></div>
+      </div>
+      <div id="ht-verdict" style="margin:8px 0"></div>
+      <canvas class="plot" id="ht-plot" aria-label="Equilibrium temperature versus speed"></canvas>
+    </div>
+  </div>
+
+  <h2 id="tps">5. Heat shields</h2>
+  <div class="grid cols-3">
+    <div class="card"><h3>Starship tiles</h3><p>Hexagonal silica-based ceramic tiles, mechanically pinned to the steel (no glue, unlike the Shuttle). The hexagon shape avoids straight gaps that would channel hot plasma. Tiles are thin because steel behind them can tolerate a few hundred °C. Losing tiles caused burn-throughs on early test flights; SpaceX added an ablative backup layer.</p><div class="tags"><span class="tag" style="--h:100">Thermal</span><span class="tag" style="--h:72">Materials</span></div></div>
+    <div class="card"><h3>PICA-X on Dragon</h3><p>Phenolic-impregnated carbon ablator: it chars and erodes, carrying heat away with the gas it gives off. It’s the right choice for lunar-return-class heating (Dragon’s shield derives from NASA’s Stardust PICA). It’s replaced or refurbished between flights.</p><div class="tags"><span class="tag" style="--h:100">Thermal</span></div></div>
+    <div class="card"><h3>Falcon 9 entry burn</h3><p>Rather than a big heat shield, the booster relights three engines at ~70 km to slow from ~2 km/s, cutting peak heating (\(\propto v^3\)) and dynamic pressure. Its exhaust also pushes the hot shock layer away from the vehicle (“retropropulsion”). The base carries insulation and ablative coatings.</p><div class="tags"><span class="tag" style="--h:100">Thermal</span><span class="tag" style="--h:30">Propulsion</span></div></div>
+  </div>
+
+  <h2 id="landing-hw">6. Landing hardware</h2>
+  <div class="grid cols-3">
+    <div class="card"><h3>Grid fins</h3><p>Lattice fins work at hypersonic and subsonic speeds and fold flat for ascent. The first aluminium ones ablated, so they were replaced by cast and machined titanium, which can fly indefinitely without touch-up.</p><div class="tags"><span class="tag" style="--h:100">Thermal</span><span class="tag" style="--h:300">GNC</span></div></div>
+    <div class="card"><h3>Landing legs</h3><p>Four carbon-fibre/aluminium-honeycomb legs (est.), deployed pneumatically just before landing, with crushable or telescoping dampers. They add ~2 t (est.) and some drag.</p><div class="tags"><span class="tag" style="--h:86">Structures</span></div></div>
+    <div class="card"><h3>Chopsticks (catch)</h3><p>Super Heavy has no legs: the launch tower’s two arms catch it by hardpoints under the grid fins. That saves leg mass and enables a fast turnaround on the same pad. The first catch was on Flight 5 in October 2024.</p><div class="tags"><span class="tag" style="--h:86">Structures</span><span class="tag" style="--h:150">Reuse</span></div></div>
+  </div>
+
+  <h2 id="manufacturing">7. Manufacturing at rate</h2>
+  <p>SpaceX’s structural philosophy: minimize part count, make it in-house (~70–80 % vertically integrated, est.), iterate by flying. Starship barrels are rolled from steel coil into ~1.8 m rings, welded into stacks and joined with domes, cheaply and outdoors at first. Raptor uses large 3-D-printed and machined parts, and Raptor 3 integrates its plumbing into the castings to cut part count. Falcon 9 builds were ~1 upper stage every couple of days at the 2024–25 cadence (est.). That matters for cost (see <a href="cost.html">Cost</a>): a learning curve only pays off if you build many.</p>
+
+  <h2 id="exercises">Exercises</h2>
+  <div id="exercise-list"></div>
+
+  <h2 id="sources">Sources</h2>
+  <ol class="source-list" id="source-list"></ol>
+</main>
+</body>
+</html>

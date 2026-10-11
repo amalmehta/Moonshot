@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moon Mission · Moonshot</title>
+<meta name="description" content="Fly a physics-based Earth-to-Moon mission: numerically integrated trans-lunar trajectory, lunar orbit insertion, powered descent, and the propellant-refilling arithmetic behind a Starship-style lunar lander.">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/" } }</script>
+<script type="module" src="js/common.js"></script>
+<script type="module" src="js/pages/moon.js"></script>
+<style>
+  #moon .launch-row { margin: 6px 0 12px; }
+  #moon .launch-row .status { font-size: .9rem; }
+  #moon .viewport { height: min(70vh, 600px); min-height: 360px; }
+  #moon .hud { font-size: .78rem; line-height: 1.45; }
+  #moon .hud-tl { top: 10px; left: 12px; }
+  #moon .hud-tr { top: 10px; right: 12px; text-align: right; }
+  #moon .hud-b { bottom: 10px; left: 12px; right: 12px; text-align: center; }
+  #moon .hud .phase-name { font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; color: #fff; }
+  #moon .hud .k { color: #9aa6c0; }
+  #moon .hud .burn { color: #ffb36b; font-weight: 700; }
+  #moon .phases { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; margin: 12px 0 8px; }
+  #moon .phases button { font: inherit; font-size: .82rem; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg-sunk); color: var(--fg-muted); }
+  #moon .phases button.done { color: var(--fg); border-color: oklch(0.6 0.12 264); }
+  #moon .phases button[aria-current="step"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 700; }
+  #moon .sim-controls { gap: 10px 14px; }
+  #moon .sim-controls .field { min-width: 180px; flex: 1; }
+  #moon .sim-controls .lbl-inline { font-size: .82rem; color: var(--fg-muted); margin-right: 4px; }
+  #moon .seg button { padding: 6px 10px; }
+  #moon .dvmap { width: 100%; height: auto; display: block; margin: 8px 0; }
+  #moon .dvmap text { font-family: var(--font); }
+  #moon .budget td, #moon .budget th { padding: 5px 8px; }
+  #moon .budget tr.total td { font-weight: 700; border-top: 2px solid var(--border); }
+  #moon .budget tr.coast td { color: var(--fg-muted); }
+  #moon canvas.aim { width: 100%; height: 380px; display: block; background: var(--bg-sunk); border-radius: 8px; }
+  #moon .result-line { font-family: var(--mono); font-size: .85rem; }
+  #moon .compare td.num { white-space: nowrap; }
+  #moon .reduced-hint { display: none; }
+  :root[data-motion="reduce"] #moon .reduced-hint { display: block; }
+  @media (max-width: 560px) {
+    #moon .hud { font-size: .68rem; }
+    #moon .hud .phase-name { font-size: .92rem; }
+    #moon .viewport { height: 62vh; }
+    #moon .sim-controls .field { min-width: 100%; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap" id="moon">
+  <section class="page-hero">
+    <div class="eyebrow">Mission</div>
+    <h1>Moon Mission</h1>
+    <p class="lead">Send me to the Moon. Here a numerical integrator flies a lander from Earth orbit to the Moon's surface:
+      it aims the trans-lunar burn, coasts three days through the pull of two bodies, brakes into lunar orbit and lands.
+      A planner then counts how many tanker flights it takes to fill the tanks for the trip.</p>
+    <nav class="toc">
+      <a href="#fly">Fly it</a> <a href="#planner">Mission planner</a> <a href="#vis-viva">Vis-viva</a> <a href="#tli">Why 3.1 km/s</a>
+      <a href="#soi">Patched conics</a> <a href="#three-body">Three bodies</a> <a href="#aim">Aim for the Moon</a> <a href="#oberth">Oberth effect</a>
+      <a href="#landing">Landing</a> <a href="#refill">Why refill</a> <a href="#check">Model vs Apollo</a> <a href="#exercises">Exercises</a> <a href="#sources">Sources</a>
+    </nav>
+  </section>
+
+  <h2 id="fly">Fly it</h2>
+  <p>Everything you see after the launch is computed, not keyframed: the coast is an adaptive Runge–Kutta integration of the ship
+    under Earth's and the Moon's gravity, the burns are the Δv the planner solved for, and the landing is an integrated powered descent.
+    The launch itself is drawn schematically (the <a href="flight.html">Flight Physics</a> page integrates ascents).</p>
+  <div class="row launch-row">
+    <button class="btn primary big" id="launch-btn" disabled>Launch me</button>
+    <span class="status muted" id="plan-status" role="status">Planning the trajectory…</span>
+  </div>
+  <p class="callout note small reduced-hint">Reduced motion is on, so the mission starts paused: each click on “Launch me” (or on a phase below) steps to the next phase. Press Play to run it continuously.</p>
+  <div class="viewport" id="moon-view" aria-label="3D view of the Earth–Moon mission">
+    <div class="overlay hud hud-tl" id="hud-tl"></div>
+    <div class="overlay hud hud-tr" id="hud-tr"></div>
+    <div class="overlay hud hud-b" id="hud-b"></div>
+  </div>
+  <ol class="phases" id="phases" aria-label="Mission phases"></ol>
+  <div class="row sim-controls">
+    <button class="btn" id="play-btn" disabled>Play</button>
+    <button class="btn" id="reset-btn" disabled>Reset</button>
+    <div class="field">
+      <label for="scrub">Mission timeline <output for="scrub" id="scrub-out">—</output></label>
+      <input type="range" id="scrub" min="0" max="1000" value="0" step="1" disabled>
+    </div>
+  </div>
+  <div class="row sim-controls" style="margin-top:8px">
+    <span><span class="lbl-inline">Time warp</span><span class="seg" id="speed-seg" role="group" aria-label="Time warp multiplier"></span></span>
+    <span><span class="lbl-inline">Camera</span><span class="seg" id="cam-seg" role="group" aria-label="Camera">
+      <button aria-pressed="true" data-cam="earth">Earth view</button><button aria-pressed="false" data-cam="moon">Moon view</button><button aria-pressed="false" data-cam="ship">Follow ship</button></span></span>
+    <span><span class="lbl-inline">Bodies</span><span class="seg" id="size-seg" role="group" aria-label="Body size">
+      <button aria-pressed="true" data-size="4">Enlarged ×4</button><button aria-pressed="false" data-size="1">True scale</button></span></span>
+  </div>
+  <p class="small muted">Distances are always to scale. “Enlarged” draws Earth and the Moon four times bigger and scales everything within 1.5 radii of them by the same factor (fading out farther away), so low orbits stay visible above the surfaces; altitudes near a body are then also ×4. Each phase runs at its own time warp (the HUD shows it); the buttons multiply it. Drag to orbit the camera, scroll or pinch to zoom.</p>
+
+  <h2 id="planner">Mission planner</h2>
+  <p>The lander is modelled on a Starship-style human landing system: one big ship that launches nearly empty to low Earth orbit (LEO),
+    is filled up there by tanker flights, then flies to the Moon and lands. Change the inputs and the planner re-solves the trajectory
+    (in a background thread) and re-does the propellant accounting.</p>
+  <div class="callout warn small"><strong>Simplified on purpose.</strong> NASA's Artemis plan is different: the crew launch on SLS in Orion, the lander waits
+    in a <em>near-rectilinear halo orbit</em> (NRHO, a 6.5-day orbit that swings from ~3,000 to ~70,000 km above the Moon), crew transfer there, and the
+    lander also carries them back up to NRHO. Propellant is first gathered in a depot ship. This page flies the textbook profile instead:
+    LEO → trans-lunar injection → a 100 km circular low lunar orbit (LLO) → surface, with tankers filling the lander directly, and (optionally)
+    an ascent back to LLO where a crew vehicle would pick you up. Masses marked est. are estimates, not published SpaceX figures.</div>
+  <div class="lab">
+    <div class="controls">
+      <div class="lab-title">Trajectory</div>
+      <div class="field"><label for="p-park">Parking orbit altitude <output for="p-park"></output></label><input type="range" id="p-park" min="160" max="500" step="10" value="200"></div>
+      <div class="field"><label for="p-peri">Lunar orbit altitude (periselene) <output for="p-peri"></output></label><input type="range" id="p-peri" min="50" max="300" step="10" value="100"></div>
+      <div class="lab-title" style="margin-top:6px">Lander (est.)</div>
+      <div class="field"><label for="p-dry">Lander dry mass <output for="p-dry"></output></label><input type="range" id="p-dry" min="80" max="200" step="5" value="120"></div>
+      <div class="field"><label for="p-pay">Crew cabin cargo &amp; payload <output for="p-pay"></output></label><input type="range" id="p-pay" min="0" max="100" step="5" value="20"></div>
+      <div class="field"><label for="p-isp">Engine Isp (vacuum, average) <output for="p-isp"></output></label><input type="range" id="p-isp" min="340" max="380" step="1" value="370"></div>
+      <label class="checkbox"><input type="checkbox" id="p-ascent" checked> Include ascent back to lunar orbit</label>
+      <div class="field"><label for="p-surf">Surface stay <output for="p-surf"></output></label><input type="range" id="p-surf" min="0" max="30" step="0.5" value="6.5"></div>
+      <div class="lab-title" style="margin-top:6px">Refilling (est.)</div>
+      <div class="field"><label for="p-tanker">Propellant delivered per tanker <output for="p-tanker"></output></label><input type="range" id="p-tanker" min="100" max="150" step="5" value="120"></div>
+      <div class="field"><label for="p-cad">Days between tanker launches <output for="p-cad"></output></label><input type="range" id="p-cad" min="1" max="20" step="1" value="6"></div>
+      <div class="field"><label for="p-boil">Boil-off <output for="p-boil"></output></label><input type="range" id="p-boil" min="0" max="1" step="0.05" value="0.2"></div>
+    </div>
+    <div class="output">
+      <div class="stats" id="plan-stats"></div>
+      <svg class="dvmap" id="dvmap" role="img" aria-label="Δv map from Earth to the lunar surface"></svg>
+      <div class="table-wrap"><table class="budget" id="budget"></table></div>
+      <p class="small muted" id="plan-notes"></p>
+    </div>
+  </div>
+
+  <h2 id="vis-viva">Vis-viva: speed from where you are</h2>
+  <p>Almost every number on this page comes from one equation. For a body moving under a single inverse-square attractor, the specific
+    orbital energy (kinetic plus potential, per kilogram) is constant along the orbit and depends only on the semi-major axis:</p>
+  $$ \varepsilon = \frac{v^2}{2} - \frac{\mu}{r} = -\frac{\mu}{2a} \quad\Longrightarrow\quad v^2 = \mu\left(\frac{2}{r} - \frac{1}{a}\right). $$
+  <details class="derive"><summary>Why ε = −μ/2a</summary>
+    <p>At periapsis and apoapsis the velocity is perpendicular to the radius, so angular momentum \(h = r_p v_p = r_a v_a\). Write energy conservation
+      between the two: \(\tfrac12 v_p^2 - \mu/r_p = \tfrac12 v_a^2 - \mu/r_a\). Substitute \(v_a = v_p r_p/r_a\) and solve:
+      \(v_p^2 = 2\mu\, r_a / (r_p(r_p+r_a))\). Then \(\varepsilon = \tfrac12 v_p^2 - \mu/r_p = \mu\left(\frac{r_a}{r_p(r_p+r_a)} - \frac{1}{r_p}\right) = -\frac{\mu}{r_p + r_a} = -\frac{\mu}{2a}\).</p>
+  </details>
+  <p>Two special cases follow at once: a circular orbit (\(a = r\)) has \(v_c = \sqrt{\mu/r}\), and escape (\(a \to \infty\)) needs \(v_\text{esc} = \sqrt{2\mu/r} = \sqrt2\,v_c\).</p>
+  <div class="table-wrap"><table class="symbols">
+    <tr><th>Symbol</th><th>Meaning</th><th>Value used</th></tr>
+    <tr><td>\(\mu_\mathrm{E},\ \mu_\mathrm{M}\)</td><td>Gravitational parameter \(GM\) of Earth, Moon</td><td>3.986 × 10¹⁴, 4.905 × 10¹² m³/s²</td></tr>
+    <tr><td>\(R_\mathrm{E},\ R_\mathrm{M}\)</td><td>Earth equatorial radius, Moon mean radius</td><td>6378 km, 1737 km</td></tr>
+    <tr><td>\(a_\mathrm{M}\)</td><td>Earth–Moon distance (mean; the model's circular orbit)</td><td>384,400 km</td></tr>
+    <tr><td>\(r,\ v,\ a\)</td><td>Distance from the attractor, speed, semi-major axis</td><td></td></tr>
+    <tr><td>\(v_\infty\)</td><td>Hyperbolic excess speed: speed relative to the Moon “at infinity” (in practice, at the sphere of influence)</td><td></td></tr>
+    <tr><td>\(I_{sp},\ g_0\)</td><td>Specific impulse; standard gravity, so exhaust speed \(v_e = I_{sp} g_0\)</td><td>370 s (est.), 9.80665 m/s²</td></tr>
+    <tr><td>\(\lambda\)</td><td>Lead angle: how far the Moon is ahead of the burn point at TLI</td><td>solved</td></tr>
+  </table></div>
+
+  <h2 id="tli">Why trans-lunar injection is about 3.1 km/s</h2>
+  <p>Pretend the Moon is massless and just ask what burn in a circular parking orbit of radius \(r_1\) raises apogee to the Moon's distance \(r_2\).
+    That is the first half of a Hohmann transfer: an ellipse with \(a = (r_1+r_2)/2\), entered with a single tangential burn,</p>
+  $$ \Delta v_\text{TLI} = \sqrt{\frac{\mu_\mathrm{E}}{r_1}}\left(\sqrt{\frac{2 r_2}{r_1 + r_2}} - 1\right) \approx 3.13\ \text{km/s} \quad (r_1 = R_\mathrm{E} + 200\ \text{km}). $$
+  <p>The number is so stable because \(r_2 \gg r_1\): the square root is already \(\sqrt{2}\) to within 2 %, so TLI is “nearly escape”: the
+    perigee speed after the burn, 10.92 km/s, is just 93 m/s short of escape speed at that height. The minimum-energy ellipse takes
+    \(\pi\sqrt{a^3/\mu_\mathrm{E}} \approx 5\) days; burning a few tens of m/s more cuts that to about 3 days, because a minimum-energy ship crawls
+    near apogee. The planner's integrated answer, <strong id="tli-inline">…</strong>, sits a little above the Hohmann value for exactly this reason.</p>
+
+  <h2 id="soi">Patched conics and the sphere of influence</h2>
+  <p>The classic hand method splits the trip in two. Far from the Moon, treat the ship as orbiting Earth alone; close to it, as orbiting the Moon
+    alone; and stitch (“patch”) the two conics together at the boundary of the Moon's <em>sphere of influence</em> (SOI).
+    Laplace defined that boundary as the distance where it becomes equally accurate to use either body as the centre.</p>
+  <details class="derive" open><summary>Derivation: r<sub>SOI</sub> = a (m/M)<sup>2/5</sup></summary>
+    <p>Let the Moon (mass \(m\)) be at distance \(a\) from Earth (mass \(M\)) and the ship at a small distance \(r\) from the Moon.</p>
+    <p><em>Moon-centred view.</em> Main acceleration \(Gm/r^2\). Earth's effect in this (accelerating) frame is only its <em>tidal</em> part:
+      the difference between Earth's pull on the ship and on the Moon, \(\approx GM r/a^3\) for \(r \ll a\). Ratio:
+      \(\dfrac{GMr/a^3}{Gm/r^2} = \dfrac{M}{m}\left(\dfrac{r}{a}\right)^3\).</p>
+    <p><em>Earth-centred view.</em> Main acceleration \(\approx GM/a^2\); the Moon perturbs it by \(\approx Gm/r^2\) (its pull on Earth, \(Gm/a^2\), is negligible next to that). Ratio:
+      \(\dfrac{Gm/r^2}{GM/a^2} = \dfrac{m}{M}\left(\dfrac{a}{r}\right)^2\).</p>
+    <p>Set the ratios equal: \(\dfrac{M}{m}\left(\dfrac{r}{a}\right)^3 = \dfrac{m}{M}\left(\dfrac{a}{r}\right)^2 \Rightarrow \left(\dfrac{r}{a}\right)^5 = \left(\dfrac{m}{M}\right)^2\), so</p>
+    $$ r_\text{SOI} = a\left(\frac{m}{M}\right)^{2/5} = 384{,}400\ \text{km}\times 0.0123^{0.4} \approx 66{,}200\ \text{km}. $$
+  </details>
+  <p>Inside the SOI the ship is on a hyperbola about the Moon. Matching velocities at the boundary gives the arrival speed relative to the Moon,
+    \(v_\infty\) (the Moon moves at 1.02 km/s; a Hohmann ship at apogee only at 0.19 km/s, so \(v_\infty \approx 0.84\) km/s), and energy on the hyperbola gives the
+    speed at periselene and the lunar orbit insertion (LOI) burn to circularize there:</p>
+  $$ v_p = \sqrt{v_\infty^2 + \frac{2\mu_\mathrm{M}}{r_p}}, \qquad \Delta v_\text{LOI} = v_p - \sqrt{\frac{\mu_\mathrm{M}}{r_p}}. $$
+  <p>Patched conics get within a few percent of the real numbers (see <a href="#check">the comparison</a>), which is why they are still taught and still used
+    for first guesses. But they cannot tell you which lead angle actually hits a 100 km periselene, because that depends on how the Moon's pull
+    bends the path over the last day, and errors of 1 m/s at TLI become hundreds of km at the Moon.</p>
+
+  <h2 id="three-body">Three bodies: why we integrate</h2>
+  <p>Two bodies have a closed-form answer (conic sections). Three do not: Poincaré showed in the 1890s that the general three-body problem has no
+    solution in terms of ordinary functions, and nearby trajectories can diverge chaotically. So we write down Newton's law and integrate it numerically.
+    In a frame centred on Earth, with the Moon at \(\mathbf r_\mathrm{M}(t)\):</p>
+  $$ \ddot{\mathbf r} = -\mu_\mathrm{E}\frac{\mathbf r}{|\mathbf r|^3} - \mu_\mathrm{M}\left(\frac{\mathbf r - \mathbf r_\mathrm{M}}{|\mathbf r - \mathbf r_\mathrm{M}|^3} + \frac{\mathbf r_\mathrm{M}}{|\mathbf r_\mathrm{M}|^3}\right). $$
+  <p>The last term is the <em>indirect term</em>. Earth-centred coordinates are not inertial: the Moon accelerates Earth toward itself by
+    \(\mu_\mathrm{M} \mathbf r_\mathrm{M}/|\mathbf r_\mathrm{M}|^3\), so we subtract that from the ship's acceleration. Leave it out and a ship near Earth would feel the Moon's
+    full pull instead of only the much smaller tidal difference. The Moon itself moves on a circle at \(n = \sqrt{(\mu_\mathrm{E}+\mu_\mathrm{M})/a_\mathrm{M}^3}\), a 27.3-day sidereal month.</p>
+  <p>The integrator is the Dormand–Prince Runge–Kutta 5(4) pair (the method behind MATLAB's <code>ode45</code>). Each step evaluates the acceleration
+    seven times and forms two estimates of the new state, one 5th-order and one 4th-order accurate. Their difference estimates the error; the step
+    is accepted if that error is below a tolerance (here \(10^{-10}\) relative) and the next step size is scaled by \(0.9\,(\text{tol}/\text{err})^{1/5}\).
+    Near Earth the steps are seconds long; in mid-coast they stretch to hours. Closest approach to the Moon is found as a root of
+    \((\mathbf r - \mathbf r_\mathrm{M})\cdot(\mathbf v - \mathbf v_\mathrm{M}) = 0\) by bisection inside the step.</p>
+  <h3>How the planner aims</h3>
+  <p>The TLI burn is a tangential impulse at a fixed point of the parking orbit. There are two unknowns, the burn size \(\Delta v\) and the Moon's lead
+    angle \(\lambda\), and two conditions. The first is that periselene lands at the target altitude on the far side, passing the Moon
+    clockwise (retrograde, as Apollo did). The second is a <em>free return</em>: if the LOI burn never happens, the Moon's gravity swings the ship
+    back to Earth with a 60 km perigee, ready for re-entry. That is how Apollo 8, 10 and 11 flew (Apollo 13 depended on it). The solver is two nested 1-D root finds.
+    For each trial \(\Delta v\), a coarse scan in \(\lambda\) brackets the angle that gives the target periselene and a regula-falsi search refines it.
+    An outer search on \(\Delta v\) then drives the return perigee to 60 km. That is a few hundred integrations, about half a second, run in a Web Worker.</p>
+  <figure style="margin:0"><canvas class="plot" id="coast-plot" aria-label="Distance from Earth and Moon during the coast"></canvas>
+    <figcaption class="small muted">The integrated coast: distance from Earth and from the Moon. The dashed line is the free-return leg the ship would fly if it skipped lunar orbit insertion.</figcaption></figure>
+
+  <h2 id="aim">Aim for the Moon yourself</h2>
+  <p>Each change below runs one integration (a few ms). Small changes matter: 10 m/s at TLI or 1° of lead angle moves periselene by thousands of km.</p>
+  <div class="lab">
+    <div class="controls">
+      <div class="lab-title">Your trans-lunar injection</div>
+      <div class="field"><label for="aim-dv">TLI Δv <output for="aim-dv"></output></label><input type="range" id="aim-dv" min="3050" max="3300" step="1" value="3160"></div>
+      <div class="field"><label for="aim-lam">Moon lead angle at TLI <output for="aim-lam"></output></label><input type="range" id="aim-lam" min="90" max="170" step="0.1" value="130"></div>
+      <button class="btn" id="aim-planned">Use the planner's solution</button>
+      <p class="small muted">The burn happens at the right-hand point of the parking orbit (3 o'clock), moving counter-clockwise like the Moon. The grey circle marks where the Moon is at closest approach.</p>
+    </div>
+    <div class="output">
+      <canvas class="aim" id="aim-canvas" aria-label="Trajectory plot in the Earth-centred frame"></canvas>
+      <p class="result-line" id="aim-result" role="status"></p>
+    </div>
+  </div>
+
+  <h2 id="oberth">The Oberth effect: burn where you are fast</h2>
+  <p>Why burn for the Moon from low orbit instead of climbing first? A burn changes kinetic energy by
+    \(\Delta(\tfrac12 v^2) = v\,\Delta v + \tfrac12\Delta v^2\): the same \(\Delta v\) buys more energy when \(v\) is already high, and the ship is fastest
+    at the bottom of the gravity well. After a burn at speed \(v_0\) where the escape speed is \(v_\text{esc}\), conservation of energy gives the speed left over far away:</p>
+  $$ v_\infty = \sqrt{(v_0 + \Delta v)^2 - v_\text{esc}^2}. $$
+  <p>From a 200 km orbit (\(v_0 = 7.78\), \(v_\text{esc} = 11.01\) km/s), 3.22 km/s just escapes and 3.40 km/s leaves with \(v_\infty = 1.97\) km/s: the last
+    175 m/s bought almost 2 km/s. The propellant's own kinetic energy is what pays for this. Exhaust dumped deep in the well leaves with
+    less energy, so more of it ends up in the ship.</p>
+
+  <h2 id="landing">Lunar orbit insertion, descent and ascent</h2>
+  <p>At periselene the ship is moving at about 2.5 km/s relative to the Moon, faster than the Moon's 2.3 km/s escape speed at 100 km, so without a burn it leaves again (the free return).
+    A retrograde LOI burn of about 0.9 km/s drops it to the 1.63 km/s circular speed.</p>
+  <p><strong>Deorbit.</strong> A small Hohmann-style burn (≈ 20 m/s) lowers the far side of the orbit from 100 km to 15 km, where powered descent begins (Apollo's “PDI” altitude, chosen so
+    the LM was never on a surface-intersecting path until it lit the engine).</p>
+  <p><strong>Powered descent.</strong> The model flies a <em>gravity turn</em>: constant thrust, always pointing straight against the velocity. With flight-path angle \(\gamma\) (negative going down)
+    and local gravity \(g = \mu_\mathrm{M}/r^2\),</p>
+  $$ \dot v = -\frac{T}{m} - g\sin\gamma, \qquad v\,\dot\gamma = -\left(g - \frac{v^2}{r}\right)\cos\gamma, \qquad \dot m = -\frac{T}{I_{sp} g_0}. $$
+  <p>One number is free, the thrust level, and it is solved by bisection so that the speed reaches zero exactly at the surface (too little thrust and you hit the ground fast; too much and you stop high).
+    The Δv is \(I_{sp} g_0 \ln(m_0/m_f)\). It exceeds the starting speed only by the <em>gravity loss</em> \(\int g\sin|\gamma|\,dt\), which is small for a short, punchy burn.
+    Real landers spend more: Apollo's LM had a lunar thrust-to-weight of only about 1.8, held altitude while braking, pitched up so the crew could see the site, and carried a hover reserve.</p>
+  <figure style="margin:0"><canvas class="plot" id="descent-plot" aria-label="Powered descent profile"></canvas>
+    <figcaption class="small muted" id="descent-caption">Integrated powered descent: altitude against distance flown over the ground.</figcaption></figure>
+  <p><strong>Ascent.</strong> The reverse: a 10 s vertical rise, a small pitch-over kick, then a gravity turn with thrust along the velocity at lunar T/W = 2. The kick is solved so the engine
+    cuts off flying level just as the coasting orbit's high point reaches the target. A last small burn circularizes there. The loss-free minimum (a Hohmann hop from the surface) is 1.73 km/s; the
+    integrated ascent costs about 1.9 km/s.</p>
+
+  <h2 id="refill">Why refill: the tyranny of the rocket equation</h2>
+  <p>The rocket equation \(\Delta v = I_{sp} g_0 \ln(m_0/m_f)\) is exponential in the wrong direction. Add up the Δv after low Earth orbit (TLI, corrections,
+    LOI, deorbit, descent, hover, and ascent if you want to leave again): about <strong id="dv-after-leo">7.9 km/s</strong>. With \(v_e = 370 \times 9.81 = 3.63\) km/s the required
+    mass ratio is <strong id="mass-ratio">≈ 8.9</strong>. A lander weighing <strong id="end-mass">140 t</strong> at the end therefore needs <strong id="prop-need">≈ 1,070 t</strong> of propellant in LEO.</p>
+  <p>But a ship that has just flown to orbit arrives with only the propellant its own climb didn't use. The planner estimates <strong id="prop-resid">≈ 130 t</strong> (booster burn-out
+    with a 10 % landing reserve, est.; the ship then burns what the remaining ~9.4 km/s to LEO needs). Launching fully fuelled is impossible: the ship would be too heavy to reach orbit. So the tanks are filled in orbit,
+    one tanker at a time. The planner counts flights given each tanker's delivered propellant. Public estimates for a real HLS mission range from under ten to about twenty flights,
+    and SpaceX hasn't published a firm number (est.).</p>
+  <h3>Boil-off</h3>
+  <p>Liquid oxygen (−183 °C) and methane (−162 °C) slowly boil as heat leaks in through insulation, plumbing and sunlight. A heat leak \(\dot Q\) evaporates
+    \(\dot m = \dot Q / h_\text{vap}\) of propellant: with \(h_\text{vap} \approx 213\) kJ/kg for oxygen, a 1 kW leak boils 400 kg of LOX a day. The planner treats boil-off as a fixed fraction
+    of the propellant aboard per day, so what was delivered first has been boiling longest. A slow tanker cadence and a leaky tank can add whole flights. The same loss applies on the way to the Moon
+    and while waiting in lunar orbit or on the surface.</p>
+
+  <h2 id="check">Model vs Apollo vs patched conics</h2>
+  <p>The same quantities three ways: the hand method, the integrated model (Apollo-like inputs: 190 km parking orbit, 110 km periselene, free return), and what Apollo actually flew. Each row says what the model leaves out.
+    These are the checks the <a href="validation.html">Validation</a> page runs.</p>
+  <div class="table-wrap"><table class="compare" id="compare-table"><tr><td class="muted">Computing…</td></tr></table></div>
+
+  <h2 id="exercises">Exercises</h2>
+  <div id="exercise-list"></div>
+
+  <h2 id="sources">Sources</h2>
+  <ol class="source-list">
+    <li><a href="https://www.nasa.gov/history/afj/ap11fj/02earth-orbit-tli.html">NASA Apollo Flight Journal: Apollo 11, Earth orbit and trans-lunar injection</a> (TLI Δv 10,435.6 ft/s, ignition 002:44)</li>
+    <li><a href="https://www.nasa.gov/history/afj/ap11fj/12day4-loi1.html">NASA Apollo Flight Journal: Apollo 11, lunar orbit insertion 1</a> (2,917 ft/s, ignition 075:49:50)</li>
+    <li><a href="https://www.nasa.gov/history/afj/ap11fj/14day4-loi2.html">NASA Apollo Flight Journal: Apollo 11, LOI-2</a> (159.2 ft/s)</li>
+    <li><a href="https://www.nasa.gov/history/afj/ap11fj/17day5-undock-doi.html">NASA Apollo Flight Journal: Apollo 11, undocking and descent orbit insertion</a> (DOI 76.4 ft/s to a 15 km perilune)</li>
+    <li><a href="https://www.nasa.gov/history/afj/ap16fj/16_Day5_Pt4.html">NASA Apollo Flight Journal: Apollo 16 powered descent</a> (PDI-to-touchdown Δv 6,698 ft/s)</li>
+    <li><a href="https://en.wikipedia.org/wiki/Trans-lunar_injection">Wikipedia: Trans-lunar injection</a> (Apollo TLI 3.05–3.25 km/s)</li>
+    <li><a href="https://en.wikipedia.org/wiki/Sphere_of_influence_(astrodynamics)">Wikipedia: Sphere of influence</a> (Moon ≈ 66,100 km)</li>
+    <li><a href="https://doi.org/10.1016/0771-050X(80)90013-3">Dormand &amp; Prince, “A family of embedded Runge–Kutta formulae”, J. Comput. Appl. Math. 6 (1980)</a></li>
+    <li>Bate, Mueller &amp; White, <em>Fundamentals of Astrodynamics</em> (Dover, 1971), ch. 7 (lunar trajectories, patched conics)</li>
+    <li><a href="https://www.nasa.gov/reference/human-landing-system/">NASA: Artemis Human Landing System</a></li>
+    <li><a href="https://en.wikipedia.org/wiki/Starship_HLS">Wikipedia: Starship HLS</a> (refilling architecture, NRHO profile, tanker-count estimates)</li>
+    <li><a href="https://www.spacex.com/vehicles/starship/">SpaceX: Starship vehicle page</a> and this site's vehicle data (stage masses est.)</li>
+  </ol>
+</main>
+</body>
+</html>
