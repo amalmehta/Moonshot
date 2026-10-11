@@ -64,7 +64,7 @@ Asked and answered (2026-10-11):
 - No paper was named → reproduce the system from first principles and check against published figures (SpaceX spec pages, FAA/FCC/NASA documents, Apollo flight data). Vehicles: Falcon 9 and Starship/Super Heavy.
 - "Send me to the moon" → a physics-based Earth–Moon mission simulator with a "Launch me" button.
 - Mac app first vs website → website only (the deliverable says website).
-- Name/publishing → "Moonshot: How a Rocket Works", no SpaceX branding, with an "unofficial" disclaimer. Built locally only; nothing pushed or deployed.
+- Name/publishing → "Moonshot: How a Rocket Works", no SpaceX branding, with an "unofficial" disclaimer. Built locally first; then published on request as the public GitHub repo amalmehta/Moonshot with GitHub Pages (https://amalmehta.github.io/Moonshot/).
 - Added mid-build: Starlink and flight software as full sections with simulators; "exercises" = practice problems with hints and worked solutions.
 
 Decided without asking:
@@ -80,6 +80,7 @@ CHANGELOG:
 
 - 2026-10-11 — created
 - 2026-10-11 — built Moonshot (website): 11 pages, physics core, 70 exercises, 36 validation checks, 98 passing tests, docs and README
+- 2026-10-11 — published to GitHub (amalmehta/Moonshot, public) with GitHub Pages at https://amalmehta.github.io/Moonshot/
 - 2026-09-15 — added meta-instruction: built-out applications include a small feedback tab
 - 2026-09-15 — added meta-instruction: no "Claude" attribution in commits, PRs, or branches
 - 2026-09-16 — added meta-instruction: always include a README when adding to GitHub
