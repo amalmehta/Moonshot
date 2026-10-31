@@ -81,6 +81,7 @@ CHANGELOG:
 - 2026-10-11 — created
 - 2026-10-11 — built Moonshot (website): 11 pages, physics core, 70 exercises, 36 validation checks, 98 passing tests, docs and README
 - 2026-10-11 — published to GitHub (amalmehta/Moonshot, public) with GitHub Pages at https://amalmehta.github.io/Moonshot/
+- 2026-10-30 — Validation now lists 32 real-world checks (5 self-checks and look-ups moved to unit tests); Falcon 9 landing reserve derived from its burns (8.0 %, was a flat 12 %), with a new recovery-penalty row
 - 2026-09-15 — added meta-instruction: built-out applications include a small feedback tab
 - 2026-09-15 — added meta-instruction: no "Claude" attribution in commits, PRs, or branches
 - 2026-09-16 — added meta-instruction: always include a README when adding to GitHub

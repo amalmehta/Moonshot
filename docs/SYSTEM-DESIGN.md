@@ -94,13 +94,15 @@ flowchart LR
 - **Fit one, predict the rest.** The ideal-nozzle model needs an effective γ and molar mass. They are fitted to *one* engine per propellant (Merlin 1D, Raptor 2), and MVac, Raptor Vacuum and Raptor 3 are then genuine predictions (−1.4 %, −3.7 %, <1 %). *Trade-off:* the "effective" molar mass for methalox (23.6) is higher than the real chamber value (~22); it absorbs shifting-equilibrium and efficiency effects.
 - **2-D ascent with closed-loop guidance** instead of a 3-D 6-DOF simulation: enough to show losses, max-Q and staging, and to predict Falcon 9 payload within ~10 %. *Trade-off:* no plane change, no dog-legs, no engine-out, no aerodynamic moments.
 - **Honest tolerances.** Tight where the physics is exact (atmosphere tables, Kepler periods), loose where the inputs are estimates (stage dry masses, costs). Every row carries a note on what's missing.
+- **Validation lists only checks that could fail against the real world.** Maths self-checks (Kalman, redundancy, ZEM/ZEV) and input look-ups (steel density, the FCC shell count) are unit tests. *Trade-off:* a smaller headline count (32 rows, not 36).
+- **Falcon 9 landing reserve is derived, not fitted.** `recoveryReserve()` adds the entry burn (3 engines, 25 s) to the 9 t the landing sim starts with: about 31.5 t, 8.0 % of the stage. It replaced a flat 12 % that made recovery cost 32 % of payload against a published 19–24 %. *Trade-off:* the recovered-payload row now runs high (+9.4 %) like the expendable row (+8.8 %), rather than hiding the shared optimism behind an oversized reserve.
 - **Estimates labelled.** SpaceX doesn't publish costs, stage dry masses or many engine parameters. They are marked "est." in data and UI and cited to the best public source.
 - **Colour by similarity.** Tags/categories use hue families (propulsion = reds/oranges, hardware = olive/yellow, economics = greens, communications = cyans, flight/orbits = blues, software = violets) with shades ≥ 12° apart, defined once in `TAGS` (`js/common.js`). They're rendered with OKLCH using theme-dependent lightness so they read in both light and dark mode.
 - **localStorage only for per-viewer conveniences** (settings, progress, feedback drafts), always wrapped in try/catch so private mode still works.
 
 ## How it's tested
 
-- `npm test`: Node's built-in test runner over `tests/*.test.mjs` (98 tests at the time of writing):
+- `npm test`: Node's built-in test runner over `tests/*.test.mjs` (96 tests at the time of writing):
   - `core.test.mjs`: rocket equation round trips, staging, isentropic relations, C_F identities, USSA-1976 anchors and monotonicity, two-body relations (GEO radius, LEO→GEO Hohmann ≈ 3.9 km/s, Kepler), the ascent sim reaching orbit with sane events, and failing with an absurd payload.
   - Section tests (`moon`, `starlink`, `software`, `vehicles`): integrator energy conservation, TLI targeting, Walker geometry, J2 rates, Kalman convergence, deterministic landing, reliability identities, tank geometry.
   - `validation.test.mjs`: every model-vs-published row must sit inside its tolerance.
@@ -109,6 +111,7 @@ flowchart LR
 ## Known limits
 
 - Stage dry masses, Starship figures and all costs are public estimates. The models are only as good as those inputs.
+- The Falcon 9 recovery penalty is bracketed, not pinned: the sim gives 18.6 % with a 17 s entry burn and 23.3 % with 25 s, and the published pairs give 19–24 %. Legs and grid fins (about 2–4 t, est.) stay on in the expendable case; taking 3 t off moves the penalty to 24.4 %.
 - The nozzle model is one-γ ideal flow with a fitted efficiency, not a chemical-equilibrium (CEA) calculation.
 - The ascent is 2-D (equatorial-plane approximation at the launch latitude), with a simple gravity turn rather than an optimized trajectory, so it runs slightly optimistic.
 - The Moon mission is planar, the Moon's orbit is circular, and the HLS profile is simplified to LEO → LLO → surface (the real Artemis HLS uses NRHO, and crew ride Orion).
