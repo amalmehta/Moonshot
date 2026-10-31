@@ -7,9 +7,14 @@ import { areaRatioFromMach, machFromAreaRatio, pressureRatio, cStar, thrustCoeff
 import { atmosphere } from '../js/physics/atmosphere.js';
 import { circularVelocity, escapeVelocity, hohmann, period, elementsFromState, eccentricAnomaly, synchronousRadius } from '../js/physics/orbit.js';
 import { simulateAscent, presetFromVehicle } from '../js/physics/ascent.js';
+import { MATERIALS } from '../js/physics/structures.js';
 import { VEHICLES, ENGINES } from '../js/data/vehicles.js';
 
 const close = (a, b, rel = 1e-9, msg) => assert.ok(Math.abs(a - b) <= Math.abs(b) * rel + 1e-12, msg ?? `${a} ≉ ${b}`);
+
+test('steel density in the material table is a handbook 304-type value', () => {
+  assert.ok(MATERIALS.steel.density >= 7900 && MATERIALS.steel.density <= 8000);
+});
 
 test('rocket equation round-trips', () => {
   const dv = deltaV(300, 1000, 400);

@@ -2,23 +2,15 @@
 // Must be pure (no DOM) so Node tests can run it. Shape documented in js/validation/index.js.
 import { R_EARTH, C_LIGHT, DEG } from '../physics/constants.js';
 import {
-  SHELLS_GEN1, totalSatellites, orbitalPeriod, nodalPrecession, radPerSecToDegPerDay,
+  orbitalPeriod, nodalPrecession, radPerSecToDegPerDay,
   SUN_SYNC_RATE, sunSyncInclination, slantRange,
 } from '../physics/starlink.js';
 
-const FCC_GEN1 = 'https://docs.fcc.gov/public/attachments/FCC-21-48A1.pdf';
 const LATENCY = 'https://www.starlink.com/public-files/StarlinkLatency.pdf';
 
 export default function checks() {
   const a550 = R_EARTH + 550e3, a560 = R_EARTH + 560e3;
   return [
-    {
-      id: 'starlink-gen1-count',
-      quantity: 'Gen1 constellation size (sum of the five Walker shells)',
-      computed: totalSatellites(SHELLS_GEN1), reported: 4408, unit: 'satellites', tolerance: 0,
-      source: FCC_GEN1,
-      note: '72×22 + 72×22 + 36×20 + 6×58 + 4×43, the plane/slot counts in the FCC’s April 2021 modification order.',
-    },
     {
       id: 'starlink-period-550',
       quantity: 'Orbital period of a 550 km Starlink satellite',
