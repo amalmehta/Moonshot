@@ -6,11 +6,21 @@ import { deltaV, massRatio, propellantFor, propellantFromStart, stackDeltaV, max
 import { areaRatioFromMach, machFromAreaRatio, pressureRatio, cStar, thrustCoefficient, enginePerformance, optimalAreaRatio } from '../js/physics/engine.js';
 import { atmosphere } from '../js/physics/atmosphere.js';
 import { circularVelocity, escapeVelocity, hohmann, period, elementsFromState, eccentricAnomaly, synchronousRadius } from '../js/physics/orbit.js';
-import { simulateAscent, presetFromVehicle } from '../js/physics/ascent.js';
+import { simulateAscent, simulatedMaxPayload, presetFromVehicle, recoveryReserve } from '../js/physics/ascent.js';
 import { MATERIALS } from '../js/physics/structures.js';
+import { F9_ASCENT, F9_RESERVE } from '../js/validation/flight.js';
 import { VEHICLES, ENGINES } from '../js/data/vehicles.js';
 
 const close = (a, b, rel = 1e-9, msg) => assert.ok(Math.abs(a - b) <= Math.abs(b) * rel + 1e-12, msg ?? `${a} ≉ ${b}`);
+
+test('recovery reserve: burn arithmetic, and a bigger reserve costs payload', () => {
+  const e = { thrustVac: 1000e3, ispVac: 1000e3 / (100 * G0) };   // 100 kg/s per engine
+  const r = recoveryReserve(100e3, e, 5e3, { engines: 3, seconds: 10 });
+  close(r.entry, 3e3); close(r.total, 8e3); close(r.fraction, 0.08);
+  assert.ok(F9_RESERVE.fraction > 0.05 && F9_RESERVE.fraction < 0.1, 'no boostback: under 10 % of the stage');
+  const payload = reserve => simulatedMaxPayload({ ...presetFromVehicle(VEHICLES.falcon9, { ENGINES, boosterReserve: reserve }), ...F9_ASCENT }, 50000);
+  assert.ok(payload(F9_RESERVE.fraction + 0.02) < payload(F9_RESERVE.fraction));
+});
 
 test('steel density in the material table is a handbook 304-type value', () => {
   assert.ok(MATERIALS.steel.density >= 7900 && MATERIALS.steel.density <= 8000);

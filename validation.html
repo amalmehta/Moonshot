@@ -34,6 +34,7 @@
   <ul>
     <li><strong>Inputs</strong> are public: SpaceX vehicle pages and user’s guide, FAA/FCC/NASA documents, and (marked “est.”) widely cited estimates where SpaceX hasn’t published a number.</li>
     <li><strong>No fitting to the answer.</strong> The only fitted parameters are the effective exhaust-gas γ and molar mass, each fitted to one engine (Merlin 1D, Raptor 2) and then used to <em>predict</em> the others. The ascent pitch-kick angle was chosen to maximize payload, as a real trajectory designer would, not to match 22.8 t.</li>
+    <li><strong>The landing reserve is derived too.</strong> The propellant Falcon 9 keeps for recovery comes from its entry and landing burns, not from the payload it produces.</li>
     <li><strong>Only checks that could fail against the real world are listed.</strong> Maths self-checks (Kalman, redundancy and guidance identities) and input look-ups are unit tests instead.</li>
     <li><strong>Tolerances</strong> reflect model fidelity: tight (≤ 1 %) for exact physics such as standard-atmosphere tables and Kepler periods; loose (10–25 %) where the inputs themselves are estimates (stage masses, costs).</li>
   </ul>

@@ -30,6 +30,20 @@ export function presetFromVehicle(v, opts = {}) {
   };
 }
 
+/** Falcon 9 entry burn: 3 engines for 25 s (Jason-3 flight data, Spaceflight101; webcasts quote 17–25 s). */
+export const F9_ENTRY_BURN = { engines: 3, seconds: 25 };
+
+/**
+ * Propellant a booster must keep at MECO to land at sea without a boostback: the entry burn at full
+ * thrust (an upper bound, since start-up and shutdown ramps burn less) plus what the landing burn starts with.
+ * engine: { thrustVac, ispVac }. Returns { entry, landing, total (kg), fraction (of stage propellant) }.
+ */
+export function recoveryReserve(stageProp, engine, landingProp, burn = F9_ENTRY_BURN) {
+  const entry = burn.engines * burn.seconds * engine.thrustVac / (engine.ispVac * G0);
+  const total = entry + landingProp;
+  return { entry, landing: landingProp, total, fraction: total / stageProp };
+}
+
 /**
  * Run the ascent.
  * cfg: { stages, payload, targetAlt, latitude (deg), pitchKickTime, pitchKickAngle (deg), qLimit (Pa, throttle bucket),
