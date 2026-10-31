@@ -136,6 +136,7 @@ function updateHohmann() {
   const c = hoCanvas, ctx = c.getContext('2d'), dpr = Math.min(devicePixelRatio || 1, 2);
   const w = c.clientWidth, H = c.clientHeight;
   c.width = w * dpr; c.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, H);
+  if (Math.min(w, H) <= 32) return; // no room for the 16 px margins yet (hidden or background tab); the ResizeObserver redraws
   const rmax = Math.max(r1, r2);
   const s = (Math.min(w, H) / 2 - 16) / rmax;
   const a = (r1 + r2) / 2, e = Math.abs(r2 - r1) / (r1 + r2);
